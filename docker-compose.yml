@@ -1,0 +1,46 @@
+version: "3.9"
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - user-service
+      - reading-service
+      - analytics-service
+
+  user-service:
+    build:
+      context: ./services/user-service
+    ports:
+      - "4001:4001"
+
+  reading-service:
+    build:
+      context: ./services/reading-service
+    ports:
+      - "4002:4002"
+
+  analytics-service:
+    build:
+      context: ./services/analytics-service
+    ports:
+      - "4003:4003"
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: book_platform
+    ports:
+      - "5432:5432"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
