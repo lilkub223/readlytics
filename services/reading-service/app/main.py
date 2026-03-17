@@ -1,103 +1,134 @@
 from typing import Literal
 
-from fastapi import FastAPI, Query
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Query, status
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+
+from app.auth import CurrentUserId
+from app.db import get_database_health
+from app.external_books import search_open_library
+from app.repository import (
+    get_book,
+    get_shelves_for_user,
+    list_reviews,
+    search_cached_books,
+    upsert_book,
+    upsert_review,
+    upsert_shelf_entry,
+    update_progress,
+)
 
 
 class ShelfEntryPayload(BaseModel):
     bookId: str
     status: Literal["want_to_read", "currently_reading", "finished", "did_not_finish"]
-    currentPage: int = 0
+    currentPage: int = Field(default=0, ge=0)
 
 
 class ProgressPayload(BaseModel):
-    currentPage: int
-    minutesRead: int | None = None
+    currentPage: int = Field(ge=0)
+    minutesRead: int | None = Field(default=None, gt=0)
     sessionDate: str | None = None
 
 
 class ReviewPayload(BaseModel):
     bookId: str
-    rating: int
+    rating: int = Field(ge=1, le=5)
     reviewText: str | None = None
 
+
 app = FastAPI(title="reading-service")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")
 def health():
-    return {"service": "reading-service", "status": "ok"}
+    database = get_database_health()
+    overall = "ok" if database["status"] == "ok" else "degraded"
+    return {"service": "reading-service", "status": overall, "database": database}
 
 
 @app.get("/api/books/search")
 def search_books(q: str = Query(..., min_length=1)):
-    return {
-        "query": q,
-        "results": [
-            {
-                "id": "book-1",
-                "title": "The Left Hand of Darkness",
-                "authors": ["Ursula K. Le Guin"],
-                "source": "open-library",
-            }
-        ],
-    }
+    cached_results = search_cached_books(q)
+    external_results = search_open_library(q)
+
+    seen_pairs = {(book["source"], book["externalId"]) for book in cached_results}
+    results = list(cached_results)
+
+    for external_book in external_results:
+        if (external_book["external_source"], external_book["external_id"]) in seen_pairs:
+            continue
+        persisted = upsert_book(external_book)
+        results.append(persisted)
+
+    return {"query": q, "results": results[:10]}
 
 
 @app.get("/api/books/{book_id}")
-def get_book(book_id: str):
-    return {
-        "id": book_id,
-        "title": "Demo Book",
-        "authors": ["Demo Author"],
-        "description": "Book detail endpoint scaffolded.",
-    }
+def get_book_details(book_id: str):
+    book = get_book(book_id)
+
+    if not book:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found.")
+
+    return book
 
 
 @app.get("/api/shelves/me")
-def get_my_shelves():
-    return {
-        "want_to_read": [{"bookId": "book-1", "title": "Demo Book"}],
-        "currently_reading": [],
-        "finished": [],
-        "did_not_finish": [],
-    }
+def get_my_shelves(current_user_id: CurrentUserId):
+    return get_shelves_for_user(current_user_id)
 
 
 @app.post("/api/shelves")
-def upsert_shelf_entry(payload: ShelfEntryPayload):
+def create_or_update_shelf_entry(payload: ShelfEntryPayload, current_user_id: CurrentUserId):
+    book = get_book(payload.bookId)
+
+    if not book:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found.")
+
     return {
-        "message": "Shelf entry endpoint scaffolded.",
-        "entry": payload.model_dump(),
+        "message": "Shelf entry saved.",
+        "entry": upsert_shelf_entry(current_user_id, payload.bookId, payload.status, payload.currentPage),
     }
 
 
 @app.patch("/api/shelves/{entry_id}/progress")
-def update_progress(entry_id: str, payload: ProgressPayload):
-    return {
-        "message": "Progress endpoint scaffolded.",
-        "entryId": entry_id,
-        "progress": payload.model_dump(),
-    }
+def patch_progress(entry_id: str, payload: ProgressPayload, current_user_id: CurrentUserId):
+    entry = update_progress(
+        current_user_id,
+        entry_id,
+        payload.currentPage,
+        payload.minutesRead,
+        payload.sessionDate,
+    )
+
+    if not entry:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shelf entry not found.")
+
+    return {"message": "Progress updated.", "entry": entry}
 
 
 @app.post("/api/reviews")
-def create_review(payload: ReviewPayload):
+def create_or_update_review(payload: ReviewPayload, current_user_id: CurrentUserId):
+    book = get_book(payload.bookId)
+
+    if not book:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found.")
+
     return {
-        "message": "Review endpoint scaffolded.",
-        "review": payload.model_dump(),
+        "message": "Review saved.",
+        "review": upsert_review(current_user_id, payload.bookId, payload.rating, payload.reviewText),
     }
 
 
 @app.get("/api/reviews/book/{book_id}")
-def list_reviews(book_id: str):
-    return {
-        "bookId": book_id,
-        "reviews": [
-            {
-                "userId": "demo-user-1",
-                "rating": 5,
-                "reviewText": "Thoughtful and atmospheric.",
-            }
-        ],
-    }
+def get_book_reviews(book_id: str):
+    return {"bookId": book_id, "reviews": list_reviews(book_id)}

@@ -16,12 +16,30 @@ services:
       context: ./services/user-service
     ports:
       - "4001:4001"
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: book_platform
+      JWT_SECRET: local-dev-secret
+    depends_on:
+      - postgres
 
   reading-service:
     build:
       context: ./services/reading-service
     ports:
       - "4002:4002"
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: book_platform
+      JWT_SECRET: local-dev-secret
+    depends_on:
+      - postgres
 
   analytics-service:
     build:
