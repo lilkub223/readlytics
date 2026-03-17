@@ -36,6 +36,8 @@ Portfolio project for a production-style social book-tracking application.
 ## Local Notes
 - The user service now expects PostgreSQL credentials through `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, and `PGDATABASE`.
 - The reading service uses the same PostgreSQL variables and shared `JWT_SECRET` for protected routes.
+- The analytics service also uses PostgreSQL plus the shared `JWT_SECRET` so it can compute user-specific metrics from authenticated requests.
 - `docker-compose.yml` sets those values automatically for containerized runs.
 - If you run the user service directly after pulling recent changes, run `npm install` inside `services/user-service/` to install the `pg` dependency.
 - If you run the reading service directly after pulling recent changes, activate its virtualenv and run `pip install -r requirements.txt` inside `services/reading-service/`.
+- If you run the analytics service directly after pulling recent changes, activate its virtualenv and run `pip install -r requirements.txt` inside `services/analytics-service/`.

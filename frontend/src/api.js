@@ -76,10 +76,26 @@ export function saveReview(token, payload) {
   });
 }
 
-export function getAnalyticsSummary() {
-  return request(`${ANALYTICS_SERVICE_URL}/api/analytics/me/summary`);
+export function getAnalyticsSummary(token) {
+  return request(`${ANALYTICS_SERVICE_URL}/api/analytics/me/summary`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
 }
 
-export function getRecommendations() {
-  return request(`${ANALYTICS_SERVICE_URL}/api/recommendations/me`);
+export function getRecommendations(token) {
+  return request(`${ANALYTICS_SERVICE_URL}/api/recommendations/me`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
+export function getFeed(token) {
+  return request(`${ANALYTICS_SERVICE_URL}/api/feed/me`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
 }

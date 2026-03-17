@@ -1,6 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.auth import CurrentUserId
+from app.db import get_database_health
+from app.repository import get_feed, get_recommendations, get_summary
+
 app = FastAPI(title="analytics-service")
 
 app.add_middleware(
@@ -14,42 +18,21 @@ app.add_middleware(
 
 @app.get("/health")
 def health():
-    return {"service": "analytics-service", "status": "ok"}
+    database = get_database_health()
+    overall = "ok" if database["status"] == "ok" else "degraded"
+    return {"service": "analytics-service", "status": overall, "database": database}
 
 
 @app.get("/api/analytics/me/summary")
-def analytics_summary():
-    return {
-        "booksFinished": 12,
-        "pagesReadTotal": 4380,
-        "averageRating": 4.25,
-        "currentStreakDays": 6,
-        "favoriteGenres": ["science fiction", "literary fiction"],
-    }
+def analytics_summary(current_user_id: CurrentUserId):
+    return get_summary(current_user_id)
 
 
 @app.get("/api/recommendations/me")
-def recommendations():
-    return {
-        "recommendations": [
-            {
-                "bookId": "book-42",
-                "title": "Kindred",
-                "reason": "Popular with readers who liked speculative historical fiction.",
-                "score": 92.4,
-            }
-        ],
-    }
+def recommendations(current_user_id: CurrentUserId):
+    return {"recommendations": get_recommendations(current_user_id)}
 
 
 @app.get("/api/feed/me")
-def feed():
-    return {
-        "items": [
-            {
-                "type": "review_created",
-                "actorUsername": "genrehunter",
-                "message": "genrehunter reviewed Kindred",
-            }
-        ],
-    }
+def feed(current_user_id: CurrentUserId):
+    return {"items": get_feed(current_user_id)}

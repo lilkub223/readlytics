@@ -46,6 +46,15 @@ services:
       context: ./services/analytics-service
     ports:
       - "4003:4003"
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: book_platform
+      JWT_SECRET: local-dev-secret
+    depends_on:
+      - postgres
 
   postgres:
     image: postgres:16

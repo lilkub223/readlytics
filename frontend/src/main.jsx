@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 
 import {
+  getFeed,
   getAnalyticsSummary,
   getCurrentUser,
   getRecommendations,
@@ -57,35 +58,32 @@ function App() {
   const [reviewDrafts, setReviewDrafts] = useState(DEFAULT_REVIEW_DRAFTS);
   const [analytics, setAnalytics] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
+  const [feedItems, setFeedItems] = useState([]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadDashboard() {
-      try {
-        const [summary, recommendationPayload] = await Promise.all([
-          getAnalyticsSummary(),
-          getRecommendations(),
-        ]);
-
-        if (!cancelled) {
-          setAnalytics(summary);
-          setRecommendations(recommendationPayload.recommendations ?? []);
-        }
-      } catch (_error) {
-        if (!cancelled) {
-          setAnalytics(null);
-          setRecommendations([]);
-        }
-      }
+  async function loadInsights(currentToken) {
+    if (!currentToken) {
+      setAnalytics(null);
+      setRecommendations([]);
+      setFeedItems([]);
+      return;
     }
 
-    loadDashboard();
+    try {
+      const [summary, recommendationPayload, feedPayload] = await Promise.all([
+        getAnalyticsSummary(currentToken),
+        getRecommendations(currentToken),
+        getFeed(currentToken),
+      ]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+      setAnalytics(summary);
+      setRecommendations(recommendationPayload.recommendations ?? []);
+      setFeedItems(feedPayload.items ?? []);
+    } catch (_error) {
+      setAnalytics(null);
+      setRecommendations([]);
+      setFeedItems([]);
+    }
+  }
 
   useEffect(() => {
     if (!token) {
@@ -96,6 +94,9 @@ function App() {
         finished: [],
         did_not_finish: [],
       });
+      setAnalytics(null);
+      setRecommendations([]);
+      setFeedItems([]);
       window.localStorage.removeItem("book-platform-token");
       return;
     }
@@ -115,6 +116,10 @@ function App() {
           setUser(currentUser);
           setShelves(shelfData);
         }
+
+        if (!cancelled) {
+          await loadInsights(token);
+        }
       } catch (error) {
         if (!cancelled) {
           setAuthError(error.message);
@@ -129,6 +134,16 @@ function App() {
       cancelled = true;
     };
   }, [token]);
+
+  async function refreshPersonalizedData(currentToken = token) {
+    if (!currentToken) {
+      return;
+    }
+
+    const shelfData = await getShelves(currentToken);
+    setShelves(shelfData);
+    await loadInsights(currentToken);
+  }
 
   async function handleAuthSubmit(event) {
     event.preventDefault();
@@ -170,12 +185,7 @@ function App() {
   }
 
   async function refreshShelves() {
-    if (!token) {
-      return;
-    }
-
-    const shelfData = await getShelves(token);
-    setShelves(shelfData);
+    await refreshPersonalizedData();
   }
 
   async function handleShelfSave(bookId, status) {
@@ -186,7 +196,7 @@ function App() {
 
     try {
       await saveShelfEntry(token, { bookId, status, currentPage: status === "currently_reading" ? 42 : 0 });
-      await refreshShelves();
+      await refreshPersonalizedData();
       setShelfMessage(`Saved to ${formatShelfName(status)}.`);
     } catch (error) {
       setShelfMessage(error.message);
@@ -212,6 +222,7 @@ function App() {
         rating: Number(draft.rating),
         reviewText: draft.reviewText ?? "",
       });
+      await refreshPersonalizedData();
       setShelfMessage("Review saved.");
     } catch (error) {
       setShelfMessage(error.message);
@@ -322,7 +333,7 @@ function App() {
             <h2>Reading Snapshot</h2>
             <span className="pill">Analytics Service</span>
           </div>
-          {analytics ? (
+          {token && analytics ? (
             <div className="stats-grid">
               <div className="stat-card">
                 <strong>{analytics.booksFinished}</strong>
@@ -342,8 +353,11 @@ function App() {
               </div>
             </div>
           ) : (
-            <p className="muted-text">Analytics service not loaded.</p>
+            <p className="muted-text">Sign in to view personalized reading metrics.</p>
           )}
+          {analytics?.favoriteGenres?.length ? (
+            <p className="genre-line">Top genres: {analytics.favoriteGenres.join(", ")}</p>
+          ) : null}
         </article>
 
         <article className="panel search-panel wide-panel">
@@ -470,15 +484,46 @@ function App() {
             <h2>Recommendations</h2>
             <span className="pill">Analytics Service</span>
           </div>
-          <div className="recommendation-grid">
-            {recommendations.map((recommendation) => (
-              <article key={recommendation.bookId} className="recommendation-card">
-                <strong>{recommendation.title}</strong>
-                <span>{recommendation.reason}</span>
-                <span className="score-chip">{recommendation.score}</span>
-              </article>
-            ))}
+          {token ? (
+            <div className="recommendation-grid">
+              {recommendations.length ? (
+                recommendations.map((recommendation) => (
+                  <article key={recommendation.bookId} className="recommendation-card">
+                    <strong>{recommendation.title}</strong>
+                    <span>{recommendation.reason}</span>
+                    <span className="score-chip">{recommendation.score}</span>
+                  </article>
+                ))
+              ) : (
+                <p className="muted-text">Search and save more books to generate recommendations.</p>
+              )}
+            </div>
+          ) : (
+            <p className="muted-text">Sign in to unlock recommendations.</p>
+          )}
+        </article>
+
+        <article className="panel wide-panel">
+          <div className="panel-header">
+            <h2>Social Feed</h2>
+            <span className="pill">Analytics Service</span>
           </div>
+          {token ? (
+            feedItems.length ? (
+              <div className="recommendation-grid">
+                {feedItems.map((item, index) => (
+                  <article key={`${item.type}-${item.createdAt}-${index}`} className="recommendation-card">
+                    <strong>{item.message}</strong>
+                    <span className="muted-text">@{item.actorUsername}</span>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="muted-text">No feed items yet. Follow another account once that UI lands.</p>
+            )
+          ) : (
+            <p className="muted-text">Sign in to view your activity feed.</p>
+          )}
         </article>
       </section>
     </main>

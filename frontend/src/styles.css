@@ -281,6 +281,11 @@ label {
   color: #64748b;
 }
 
+.genre-line {
+  margin-top: 14px;
+  color: #334155;
+}
+
 .small-text {
   font-size: 0.9rem;
 }
