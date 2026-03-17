@@ -29,3 +29,9 @@ Portfolio project for a production-style social book-tracking application.
 
 ## Next Step
 Install dependencies in each app, then run the services locally or with Docker Compose.
+
+## Design Docs
+- `docs/project-scope.md`
+- `docs/service-boundaries.md`
+- `docs/database-schema.md`
+- `docs/api-contracts.md`
