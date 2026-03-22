@@ -1,8 +1,15 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import pg from "pg";
 
 import { config } from "./config.js";
 
 const { Pool } = pg;
+const schemaPath = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../infra/docker/init.sql"
+);
 
 const connectionConfig = config.databaseUrl
   ? { connectionString: config.databaseUrl }
@@ -15,9 +22,24 @@ const connectionConfig = config.databaseUrl
     };
 
 export const pool = new Pool(connectionConfig);
+let schemaInitialization;
 
 export function query(text, params) {
   return pool.query(text, params);
+}
+
+export async function ensureDatabaseSchema() {
+  if (!schemaInitialization) {
+    schemaInitialization = (async () => {
+      const schemaSql = await readFile(schemaPath, "utf8");
+      await query(schemaSql);
+    })().catch((error) => {
+      schemaInitialization = undefined;
+      throw error;
+    });
+  }
+
+  return schemaInitialization;
 }
 
 export async function getDatabaseHealth() {
@@ -38,4 +60,3 @@ export async function getDatabaseHealth() {
     };
   }
 }
-

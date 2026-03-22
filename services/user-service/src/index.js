@@ -2,7 +2,7 @@ import express from "express";
 
 import { requireAuth } from "./auth-middleware.js";
 import { config } from "./config.js";
-import { getDatabaseHealth } from "./db.js";
+import { ensureDatabaseSchema, getDatabaseHealth } from "./db.js";
 import { hashPassword, signToken, verifyPassword } from "./security.js";
 import {
   createFollow,
@@ -17,9 +17,21 @@ import {
 const app = express();
 
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", process.env.CORS_ORIGIN ?? "http://localhost:3000");
+  const requestOrigin = req.headers.origin;
+  const allowAllOrigins = config.corsOrigins.includes("*");
+  const allowedOrigin = allowAllOrigins
+    ? "*"
+    : config.corsOrigins.includes(requestOrigin)
+      ? requestOrigin
+      : config.corsOrigins[0];
+
+  if (allowedOrigin) {
+    res.header("Access-Control-Allow-Origin", allowedOrigin);
+  }
+
   res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+  res.header("Vary", "Origin");
 
   if (req.method === "OPTIONS") {
     return res.sendStatus(204);
@@ -181,6 +193,15 @@ app.get("/api/users/:userId/following", async (req, res) => {
   }
 });
 
-app.listen(config.port, () => {
-  console.log(`user-service listening on port ${config.port}`);
+async function startServer() {
+  await ensureDatabaseSchema();
+
+  app.listen(config.port, () => {
+    console.log(`user-service listening on port ${config.port}`);
+  });
+}
+
+startServer().catch((error) => {
+  console.error("Failed to initialize user-service.", error);
+  process.exit(1);
 });

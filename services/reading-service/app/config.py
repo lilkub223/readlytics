@@ -5,6 +5,11 @@ class Settings:
     port = int(os.getenv("PORT", "4002"))
     jwt_secret = os.getenv("JWT_SECRET", "dev-secret-change-me")
     database_url = os.getenv("DATABASE_URL")
+    cors_origins = [
+        origin.strip()
+        for origin in os.getenv("CORS_ORIGIN", "http://localhost:3000").split(",")
+        if origin.strip()
+    ]
     db_host = os.getenv("PGHOST", "localhost")
     db_port = int(os.getenv("PGPORT", "5432"))
     db_user = os.getenv("PGUSER", "postgres")

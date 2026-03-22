@@ -1,15 +1,25 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import CurrentUserId
-from app.db import get_database_health
+from app.config import settings
+from app.db import ensure_database_schema, get_database_health
 from app.repository import get_feed, get_recommendations, get_summary
 
-app = FastAPI(title="analytics-service")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    ensure_database_schema()
+    yield
+
+
+app = FastAPI(title="analytics-service", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=settings.cors_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

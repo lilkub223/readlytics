@@ -124,6 +124,51 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 4003
 ```
 
+## Deployment
+
+Readlytics is prepared for deployment on [Render](https://render.com/) with the Blueprint file at [`render.yaml`](render.yaml).
+
+### Render Deployment Flow
+
+1. Push the latest `main` branch to GitHub.
+2. In Render, choose `New` -> `Blueprint`.
+3. Connect the `lilkub223/readlytics` repository.
+4. Render will detect [`render.yaml`](render.yaml) and propose:
+   - one static frontend
+   - three free web services
+   - one free Postgres database
+5. Review the service names and deploy.
+
+The frontend build receives live backend URLs through Render environment variables, and each backend service auto-initializes the shared Postgres schema on startup. That means the first deploy does not depend on Docker-only database bootstrapping.
+
+### Frontend Environment Variables
+
+The frontend uses these variables at build time:
+
+- `VITE_USER_SERVICE_URL`
+- `VITE_READING_SERVICE_URL`
+- `VITE_ANALYTICS_SERVICE_URL`
+
+For local development, the app falls back to localhost ports automatically. In Render, these are populated from the Blueprint.
+
+### Backend Environment Variables
+
+Each backend service supports:
+
+- `PORT`
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `CORS_ORIGIN`
+
+In Render, the Blueprint sets these for you. For local development, the services can still run with the Postgres `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, and `PGDATABASE` variables.
+
+### Render Notes
+
+- The Blueprint uses free plans so you can deploy the portfolio version without defaulting to paid `starter` instances.
+- Free Render Postgres expires after 30 days unless upgraded.
+- Free web services spin down after inactivity, so the first request after idle time can be slow.
+- RabbitMQ is still part of the local architecture, but the current deployed version does not require it because live event-driven features are not wired yet.
+
 ## Project Structure
 
 ```text

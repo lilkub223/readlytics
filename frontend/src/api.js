@@ -1,6 +1,19 @@
-const USER_SERVICE_URL = "http://localhost:4001";
-const READING_SERVICE_URL = "http://localhost:4002";
-const ANALYTICS_SERVICE_URL = "http://localhost:4003";
+function normalizeBaseUrl(url, fallback) {
+  return (url ?? fallback).replace(/\/+$/, "");
+}
+
+const USER_SERVICE_URL = normalizeBaseUrl(
+  import.meta.env.VITE_USER_SERVICE_URL,
+  "http://localhost:4001"
+);
+const READING_SERVICE_URL = normalizeBaseUrl(
+  import.meta.env.VITE_READING_SERVICE_URL,
+  "http://localhost:4002"
+);
+const ANALYTICS_SERVICE_URL = normalizeBaseUrl(
+  import.meta.env.VITE_ANALYTICS_SERVICE_URL,
+  "http://localhost:4003"
+);
 
 async function request(url, options = {}) {
   const response = await fetch(url, {
@@ -37,6 +50,32 @@ export function loginUser(payload) {
 
 export function getCurrentUser(token) {
   return request(`${USER_SERVICE_URL}/api/users/me`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
+export function getUserProfile(username) {
+  return request(`${USER_SERVICE_URL}/api/users/${encodeURIComponent(username)}`);
+}
+
+export function getFollowing(userId) {
+  return request(`${USER_SERVICE_URL}/api/users/${userId}/following`);
+}
+
+export function followUser(token, userId) {
+  return request(`${USER_SERVICE_URL}/api/users/${userId}/follow`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
+export function unfollowUser(token, userId) {
+  return request(`${USER_SERVICE_URL}/api/users/${userId}/follow`, {
+    method: "DELETE",
     headers: {
       Authorization: `Bearer ${token}`,
     },

@@ -1,16 +1,20 @@
 import React, { useEffect, useState } from "react";
 
 import {
+  followUser,
   getAnalyticsSummary,
   getCurrentUser,
   getFeed,
+  getFollowing,
   getRecommendations,
   getShelves,
+  getUserProfile,
   loginUser,
   registerUser,
   saveReview,
   saveShelfEntry,
   searchBooks,
+  unfollowUser,
 } from "./api";
 
 const ROUTES = {
@@ -86,6 +90,12 @@ const SUPPORT_ITEMS = [
   "Track progress, rate books quickly, and leave thoughtful notes while the reading experience is fresh.",
   "Unlock insights and recommendations that sharpen as your library and habits grow.",
 ];
+
+const DEFAULT_COMMUNITY_STATE = {
+  loading: false,
+  error: "",
+  actionLoading: false,
+};
 
 function normalizePath(pathname) {
   const trimmed = pathname?.replace(/\/+$/, "") || ROUTES.about;
@@ -223,29 +233,108 @@ function SiteFooter() {
   );
 }
 
-function PageBanner({ eyebrow, title, description, actions }) {
+function PageBanner({ eyebrow, title, description, actions, className = "", microcopy, supportingContent }) {
   return (
-    <section className="page-banner panel reveal-section">
+    <section className={`page-banner panel reveal-section ${className}`.trim()}>
       <div className="page-banner-copy">
         <span className="section-kicker">{eyebrow}</span>
         <h1 className="page-banner-title">{title}</h1>
         <p className="page-banner-description">{description}</p>
+        {supportingContent ? <div className="page-banner-support">{supportingContent}</div> : null}
+        {actions?.length ? (
+          <div className="page-banner-cta">
+            {microcopy ? <p className="page-banner-microcopy">{microcopy}</p> : null}
+            <div className="page-banner-actions">
+              {actions.map((action) => (
+                <button
+                  key={action.label}
+                  className={action.variant === "primary" ? "primary-button" : "ghost-button"}
+                  type="button"
+                  onClick={action.onClick}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
-      {actions?.length ? (
-        <div className="page-banner-actions">
-          {actions.map((action) => (
-            <button
-              key={action.label}
-              className={action.variant === "primary" ? "primary-button" : "ghost-button"}
-              type="button"
-              onClick={action.onClick}
-            >
-              {action.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
     </section>
+  );
+}
+
+function CommunityBannerSupport({ feedItems, followingUsers, onSelectProfile, token, user }) {
+  const visibleReaders = [...followingUsers, ...(user ? [user] : [])]
+    .filter((reader, index, readers) => readers.findIndex((candidate) => candidate.id === reader.id) === index)
+    .slice(0, 4);
+
+  const previewItems = feedItems.length
+    ? feedItems.slice(0, 3).map((item) => ({
+        label: item.message,
+        meta: `@${item.actorUsername}`,
+        actorUsername: item.actorUsername,
+      }))
+    : [
+        {
+          label: token ? "Follow readers to unlock live review and finish updates." : "Live reading activity appears here once you join.",
+          meta: token ? "Your circle shapes this space." : "A calmer community, centered on books.",
+        },
+        {
+          label: "Community is built around shelves, thoughtful ratings, and meaningful recommendations.",
+          meta: "No noise, just reading signals worth keeping up with.",
+        },
+      ];
+
+  return (
+    <div className="community-banner-support">
+      <div className="community-avatar-row">
+        <div className="community-avatar-cluster" aria-hidden="true">
+          {visibleReaders.length
+            ? visibleReaders.map((reader) => (
+                <span key={reader.id} className="community-avatar-token">
+                  {getInitials(reader.displayName)}
+                </span>
+              ))
+            : Array.from({ length: 4 }).map((_, index) => (
+                <span key={index} className="community-avatar-token is-placeholder">
+                  RL
+                </span>
+              ))}
+        </div>
+        <span className="community-avatar-note">
+          {visibleReaders.length
+            ? `${visibleReaders.length} readers already shaping your circle.`
+            : "Reader activity and new connections will appear here as your circle grows."}
+        </span>
+      </div>
+
+      <div className="community-preview-list">
+        {previewItems.map((item) =>
+          item.actorUsername ? (
+            <button
+              key={`${item.actorUsername}-${item.label}`}
+              className="community-preview-item"
+              type="button"
+              onClick={() => onSelectProfile(item.actorUsername)}
+            >
+              <span className="community-preview-dot" />
+              <div className="community-preview-copy">
+                <strong>{item.label}</strong>
+                <span>{item.meta}</span>
+              </div>
+            </button>
+          ) : (
+            <div key={item.label} className="community-preview-item is-static">
+              <span className="community-preview-dot" />
+              <div className="community-preview-copy">
+                <strong>{item.label}</strong>
+                <span>{item.meta}</span>
+              </div>
+            </div>
+          )
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -816,45 +905,212 @@ function RecommendationsPanel({ token, recommendations }) {
   );
 }
 
-function CommunityPanel({ token, feedItems }) {
+function CommunityPanel({
+  communityProfile,
+  communityQuery,
+  communityState,
+  feedItems,
+  followingUsers,
+  setCommunityQuery,
+  token,
+  user,
+  onProfileSearch,
+  onSelectProfile,
+  onToggleFollow,
+}) {
+  const isOwnProfile = Boolean(user && communityProfile && communityProfile.id === user.id);
+  const isFollowing = Boolean(
+    communityProfile && followingUsers.some((reader) => reader.id === communityProfile.id)
+  );
+
   return (
-    <article className="panel wide-panel reveal-section">
-      <div className="panel-header">
-        <div>
-          <h2>Reader Activity</h2>
-          <p className="panel-description">
-            See what fellow readers are reviewing, finishing, and recommending across the community.
-          </p>
-        </div>
-      </div>
-      {token ? (
-        feedItems.length ? (
-          <div className="recommendation-grid">
-            {feedItems.map((item, index) => (
-              <article key={`${item.type}-${item.createdAt}-${index}`} className="recommendation-card">
-                <strong>{item.message}</strong>
-                <span className="muted-text">@{item.actorUsername}</span>
-              </article>
-            ))}
+    <>
+      <div className="page-two-column-grid">
+        <article className="panel reveal-section">
+          <div className="panel-header">
+            <div>
+              <h2>Find a Reader</h2>
+              <p className="panel-description">
+                Look up another reader by username, view their profile, and follow them to personalize your community feed.
+              </p>
+            </div>
           </div>
+
+          <form className="community-search-form" onSubmit={onProfileSearch}>
+            <input
+              value={communityQuery}
+              onChange={(event) => setCommunityQuery(event.target.value)}
+              placeholder="Search by username..."
+            />
+            <button className="primary-button" disabled={communityState.loading} type="submit">
+              {communityState.loading ? "Looking..." : "Find Reader"}
+            </button>
+          </form>
+
+          {communityState.error ? <p className="error-text">{communityState.error}</p> : null}
+
+          {communityProfile ? (
+            <article className="reader-profile-card">
+              <div className="reader-profile-head">
+                <div className="reader-avatar">{getInitials(communityProfile.displayName)}</div>
+                <div className="reader-profile-meta">
+                  <strong>{communityProfile.displayName}</strong>
+                  <span>@{communityProfile.username}</span>
+                </div>
+              </div>
+
+              <p className="muted-text">
+                {communityProfile.bio?.trim() || "This reader has not written a bio yet, but their shelves can still tell a story."}
+              </p>
+
+              <div className="reader-stats">
+                <div className="reader-stat">
+                  <strong>{communityProfile.followersCount}</strong>
+                  <span>Followers</span>
+                </div>
+                <div className="reader-stat">
+                  <strong>{communityProfile.followingCount}</strong>
+                  <span>Following</span>
+                </div>
+              </div>
+
+              {communityProfile.favoriteGenres?.length ? (
+                <div className="tag-row">
+                  {communityProfile.favoriteGenres.map((genre) => (
+                    <span key={genre} className="tag-chip">
+                      {genre}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="profile-action-row">
+                {isOwnProfile ? (
+                  <span className="pill">This is your profile</span>
+                ) : token ? (
+                  <button
+                    className={isFollowing ? "ghost-button" : "primary-button"}
+                    disabled={communityState.actionLoading}
+                    type="button"
+                    onClick={() => onToggleFollow(communityProfile)}
+                  >
+                    {communityState.actionLoading ? "Updating..." : isFollowing ? "Following" : "Follow Reader"}
+                  </button>
+                ) : (
+                  <button className="ghost-button" type="button" onClick={() => navigate(ROUTES.login)}>
+                    Log In to Follow
+                  </button>
+                )}
+              </div>
+            </article>
+          ) : (
+            <EmptyState
+              title="Search for a reader."
+              copy="Try a username to open a reader profile, follow them, and start shaping your community feed."
+              buttonLabel={token ? "Go to Dashboard" : "Create Account"}
+              buttonVariant={token ? "ghost" : "primary"}
+              onButtonClick={() => navigate(token ? ROUTES.dashboard : ROUTES.register)}
+            />
+          )}
+        </article>
+
+        <article className="panel reveal-section">
+          <div className="panel-header">
+            <div>
+              <h2>Your Circle</h2>
+              <p className="panel-description">
+                Keep track of the readers you follow and jump into their profiles whenever you want.
+              </p>
+            </div>
+          </div>
+
+          {token ? (
+            followingUsers.length ? (
+              <div className="circle-list">
+                {followingUsers.map((reader) => (
+                  <button
+                    key={reader.id}
+                    className="circle-card"
+                    type="button"
+                    onClick={() => onSelectProfile(reader.username)}
+                  >
+                    <div className="circle-card-copy">
+                      <strong>{reader.displayName}</strong>
+                      <span>@{reader.username}</span>
+                      <p>{reader.bio?.trim() || "A thoughtful reader building their shelves."}</p>
+                    </div>
+                    <span className="score-chip">View</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="Your circle is still empty."
+                copy="Follow a few readers and their activity will start showing up here and in your community feed."
+                buttonLabel="Find Readers"
+                onButtonClick={() => {
+                  if (communityQuery.trim()) {
+                    onProfileSearch();
+                  }
+                }}
+              />
+            )
+          ) : (
+            <EmptyState
+              title="Build your reading circle."
+              copy="Create an account to follow other readers, compare taste, and make the community feed feel alive."
+              buttonLabel="Join Readlytics"
+              buttonVariant="primary"
+              onButtonClick={() => navigate(ROUTES.register)}
+            />
+          )}
+        </article>
+      </div>
+
+      <article className="panel wide-panel reveal-section">
+        <div className="panel-header">
+          <div>
+            <h2>Reader Activity</h2>
+            <p className="panel-description">
+              See what fellow readers are reviewing, finishing, and recommending across the community.
+            </p>
+          </div>
+        </div>
+        {token ? (
+          feedItems.length ? (
+            <div className="recommendation-grid">
+              {feedItems.map((item, index) => (
+                <article key={`${item.type}-${item.createdAt}-${index}`} className="recommendation-card">
+                  <strong>{item.message}</strong>
+                  <button
+                    className="inline-profile-link"
+                    type="button"
+                    onClick={() => onSelectProfile(item.actorUsername)}
+                  >
+                    @{item.actorUsername}
+                  </button>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="Your community feed is quiet for now."
+              copy="Follow a few readers and their reviews and finished books will start showing up here."
+              buttonLabel="Discover Books"
+              onButtonClick={() => navigate(ROUTES.discover)}
+            />
+          )
         ) : (
           <EmptyState
-            title="Your community feed is quiet for now."
-            copy="Start reviewing books and building your library while community activity grows around you."
-            buttonLabel="Discover Books"
-            onButtonClick={() => navigate(ROUTES.discover)}
+            title="See what the community is reading."
+            copy="Sign in to follow reader activity, spot new favorites, and watch the conversation unfold."
+            buttonLabel="Log In"
+            buttonVariant="primary"
+            onButtonClick={() => navigate(ROUTES.login)}
           />
-        )
-      ) : (
-        <EmptyState
-          title="See what the community is reading."
-          copy="Sign in to follow reader activity, spot new favorites, and watch the conversation unfold."
-          buttonLabel="Log In"
-          buttonVariant="primary"
-          onButtonClick={() => navigate(ROUTES.login)}
-        />
-      )}
-    </article>
+        )}
+      </article>
+    </>
   );
 }
 
@@ -972,13 +1228,26 @@ function DiscoverPage(props) {
   );
 }
 
-function CommunityPage({ feedItems, token, user }) {
+function CommunityPage(props) {
+  const { feedItems, followingUsers, onSelectProfile, token, user } = props;
+
   return (
     <div className="content-stack">
       <PageBanner
+        className="community-banner"
         eyebrow="Community"
         title={user ? "Keep up with your reading circle." : "A calmer social space for readers."}
-        description="See what other readers are finishing, rating, and recommending without losing focus on your own shelves."
+        description="Stay connected with what others are reading, rating, and recommending."
+        microcopy="Join a community of readers discovering and sharing books."
+        supportingContent={
+          <CommunityBannerSupport
+            feedItems={feedItems}
+            followingUsers={followingUsers}
+            onSelectProfile={onSelectProfile}
+            token={token}
+            user={user}
+          />
+        }
         actions={
           token
             ? [{ label: "Open Dashboard", variant: "primary", onClick: () => navigate(ROUTES.dashboard) }]
@@ -988,7 +1257,7 @@ function CommunityPage({ feedItems, token, user }) {
               ]
         }
       />
-      <CommunityPanel token={token} feedItems={feedItems} />
+      <CommunityPanel {...props} />
     </div>
   );
 }
@@ -1024,6 +1293,10 @@ export default function App() {
   const [analytics, setAnalytics] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
   const [feedItems, setFeedItems] = useState([]);
+  const [communityQuery, setCommunityQuery] = useState("");
+  const [communityProfile, setCommunityProfile] = useState(null);
+  const [communityState, setCommunityState] = useState(DEFAULT_COMMUNITY_STATE);
+  const [followingUsers, setFollowingUsers] = useState([]);
 
   const totalSavedBooks = Object.values(shelves).reduce((count, entries) => count + entries.length, 0);
   const spotlightFeatures = [
@@ -1111,6 +1384,9 @@ export default function App() {
       setAnalytics(null);
       setRecommendations([]);
       setFeedItems([]);
+      setFollowingUsers([]);
+      setCommunityProfile(null);
+      setCommunityState(DEFAULT_COMMUNITY_STATE);
       window.localStorage.removeItem("book-platform-token");
       return;
     }
@@ -1146,6 +1422,35 @@ export default function App() {
     };
   }, [token]);
 
+  useEffect(() => {
+    if (!user?.id) {
+      setFollowingUsers([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadInitialFollowing() {
+      try {
+        const payload = await getFollowing(user.id);
+
+        if (!cancelled) {
+          setFollowingUsers(payload.following ?? []);
+        }
+      } catch (_error) {
+        if (!cancelled) {
+          setFollowingUsers([]);
+        }
+      }
+    }
+
+    loadInitialFollowing();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
   async function loadInsights(currentToken) {
     if (!currentToken) {
       setAnalytics(null);
@@ -1179,6 +1484,23 @@ export default function App() {
     const shelfData = await getShelves(currentToken);
     setShelves(shelfData);
     await loadInsights(currentToken);
+  }
+
+  async function refreshFollowingUsers(currentUserId = user?.id) {
+    if (!currentUserId) {
+      setFollowingUsers([]);
+      return [];
+    }
+
+    try {
+      const payload = await getFollowing(currentUserId);
+      const nextFollowing = payload.following ?? [];
+      setFollowingUsers(nextFollowing);
+      return nextFollowing;
+    } catch (_error) {
+      setFollowingUsers([]);
+      return [];
+    }
   }
 
   function handleAuthModeToggle() {
@@ -1302,10 +1624,91 @@ export default function App() {
     }
   }
 
+  async function loadCommunityProfile(username) {
+    const normalizedUsername = username.trim().replace(/^@/, "").toLowerCase();
+
+    if (!normalizedUsername) {
+      setCommunityProfile(null);
+      setCommunityState({
+        loading: false,
+        error: "Enter a username to look up a reader.",
+        actionLoading: false,
+      });
+      return;
+    }
+
+    setCommunityState({
+      loading: true,
+      error: "",
+      actionLoading: false,
+    });
+
+    try {
+      const payload = await getUserProfile(normalizedUsername);
+      setCommunityProfile(payload.profile);
+      setCommunityQuery(payload.profile.username);
+      setCommunityState({
+        loading: false,
+        error: "",
+        actionLoading: false,
+      });
+    } catch (error) {
+      setCommunityProfile(null);
+      setCommunityState({
+        loading: false,
+        error: error.message,
+        actionLoading: false,
+      });
+    }
+  }
+
+  async function handleCommunitySearch(event) {
+    event?.preventDefault();
+    await loadCommunityProfile(communityQuery);
+  }
+
+  async function handleSelectProfile(username) {
+    if (pathname !== ROUTES.community) {
+      navigate(ROUTES.community);
+    }
+
+    await loadCommunityProfile(username);
+  }
+
+  async function handleToggleFollow(profile) {
+    if (!token) {
+      navigate(ROUTES.login);
+      return;
+    }
+
+    const alreadyFollowing = followingUsers.some((reader) => reader.id === profile.id);
+    setCommunityState((current) => ({ ...current, actionLoading: true, error: "" }));
+
+    try {
+      if (alreadyFollowing) {
+        await unfollowUser(token, profile.id);
+      } else {
+        await followUser(token, profile.id);
+      }
+
+      const [profilePayload] = await Promise.all([
+        getUserProfile(profile.username),
+        refreshFollowingUsers(),
+        loadInsights(token),
+      ]);
+
+      setCommunityProfile(profilePayload.profile);
+      setCommunityState((current) => ({ ...current, actionLoading: false, error: "" }));
+    } catch (error) {
+      setCommunityState((current) => ({ ...current, actionLoading: false, error: error.message }));
+    }
+  }
+
   function handleSignOut() {
     setToken("");
     setShelfMessage("");
     setAuthError("");
+    setCommunityQuery("");
     navigate(ROUTES.about);
   }
 
@@ -1344,7 +1747,21 @@ export default function App() {
       />
     );
   } else if (pathname === ROUTES.community) {
-    content = <CommunityPage feedItems={feedItems} token={token} user={user} />;
+    content = (
+      <CommunityPage
+        communityProfile={communityProfile}
+        communityQuery={communityQuery}
+        communityState={communityState}
+        feedItems={feedItems}
+        followingUsers={followingUsers}
+        setCommunityQuery={setCommunityQuery}
+        token={token}
+        user={user}
+        onProfileSearch={handleCommunitySearch}
+        onSelectProfile={handleSelectProfile}
+        onToggleFollow={handleToggleFollow}
+      />
+    );
   } else if (pathname === ROUTES.login || pathname === ROUTES.register) {
     content = (
       <AuthPage

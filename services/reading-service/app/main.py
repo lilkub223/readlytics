@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, status
@@ -5,7 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from app.auth import CurrentUserId
-from app.db import get_database_health
+from app.config import settings
+from app.db import ensure_database_schema, get_database_health
 from app.external_books import search_open_library
 from app.repository import (
     get_book,
@@ -17,6 +19,12 @@ from app.repository import (
     upsert_shelf_entry,
     update_progress,
 )
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    ensure_database_schema()
+    yield
 
 
 class ShelfEntryPayload(BaseModel):
@@ -37,11 +45,11 @@ class ReviewPayload(BaseModel):
     reviewText: str | None = None
 
 
-app = FastAPI(title="reading-service")
+app = FastAPI(title="reading-service", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=settings.cors_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
