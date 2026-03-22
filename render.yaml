@@ -1,13 +1,10 @@
-previews:
-  generation: manual
-
 services:
   - type: web
     name: readlytics-web
     runtime: static
     rootDir: frontend
     buildCommand: npm install && npm run build
-    staticPublishPath: ./frontend/dist
+    staticPublishPath: dist
     routes:
       - type: rewrite
         source: /*
