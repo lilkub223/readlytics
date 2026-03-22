@@ -1,43 +1,167 @@
-# Book Platform
+# Readlytics
 
-Portfolio project for a production-style social book-tracking application.
+Readlytics is a full-stack social book-tracking platform built as a production-style portfolio project. It combines a React frontend with Node.js and Python microservices so users can organize shelves, review books, track reading habits, and explore personalized recommendations.
 
-## Planned Stack
-- React frontend
-- Node.js user service
-- Python reading service
-- Python analytics service
+## What It Demonstrates
+
+- Frontend development with React, JavaScript, HTML, and CSS
+- API design and integration across multiple backend services
+- Microservice boundaries using Node.js and Python
+- PostgreSQL data modeling and authenticated service behavior
+- Docker-based local orchestration
+- Git-based workflow in a Linux/Unix-style development environment
+
+## Current Features
+
+- User registration and login with JWT-based authentication
+- Multi-page product UI with dedicated About, Features, Dashboard, Discover, Community, Login, and Register views
+- Book search powered by the Open Library API
+- Shelves for `Want to Read`, `Currently Reading`, `Finished`, and `Did Not Finish`
+- Ratings and quick reviews
+- Personalized reading dashboard with summary analytics
+- Recommendation and activity-feed foundations
+
+## Architecture
+
+Readlytics is split into focused services:
+
+| Service | Tech | Responsibility | Port |
+| --- | --- | --- | --- |
+| Frontend | React + Vite | Product UI and client-side navigation | `3000` |
+| User Service | Node.js + Express | Authentication, profiles, and user relationships | `4001` |
+| Reading Service | Python + FastAPI | Book search, shelves, reading progress, ratings, and reviews | `4002` |
+| Analytics Service | Python + FastAPI | Reading analytics, recommendations, and activity feed endpoints | `4003` |
+| PostgreSQL | Postgres 16 | Primary application database | `5432` |
+| RabbitMQ | RabbitMQ | Included for planned event-driven extensions | `5672`, `15672` |
+
+## Tech Stack
+
+### Frontend
+
+- React
+- JavaScript
+- Vite
+- CSS
+
+### Backend
+
+- Node.js
+- Express
+- Python
+- FastAPI
+
+### Data and Infrastructure
+
 - PostgreSQL
 - RabbitMQ
 - Docker Compose
-- Jenkins
+- Git
 
-## Initial Structure
-- `frontend/`
-- `services/user-service/`
-- `services/reading-service/`
-- `services/analytics-service/`
-- `infra/docker/`
-- `infra/jenkins/`
-- `docs/`
+## Getting Started
 
-## Service Ports
-- Frontend: `3000`
-- User service: `4001`
-- Reading service: `4002`
-- Analytics service: `4003`
+### Option 1: Run Everything with Docker
 
-## Design Docs
+From the project root:
+
+```bash
+docker compose up --build
+```
+
+Then open:
+
+- Frontend: [http://localhost:3000](http://localhost:3000)
+- User service health: [http://localhost:4001/health](http://localhost:4001/health)
+- Reading service health: [http://localhost:4002/health](http://localhost:4002/health)
+- Analytics service health: [http://localhost:4003/health](http://localhost:4003/health)
+
+To stop the stack:
+
+```bash
+docker compose down
+```
+
+### Option 2: Run the App in Local Dev Mode
+
+Start infrastructure first:
+
+```bash
+docker compose up -d postgres rabbitmq
+```
+
+Start the frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev -- --host 0.0.0.0 --port 3000
+```
+
+Start the user service:
+
+```bash
+cd services/user-service
+npm install
+npm run dev
+```
+
+Start the reading service:
+
+```bash
+cd services/reading-service
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 4002
+```
+
+Start the analytics service:
+
+```bash
+cd services/analytics-service
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 4003
+```
+
+## Project Structure
+
+```text
+frontend/
+services/
+  user-service/
+  reading-service/
+  analytics-service/
+infra/
+  docker/
+  jenkins/
+docs/
+```
+
+## Documentation
+
 - `docs/project-scope.md`
 - `docs/service-boundaries.md`
 - `docs/database-schema.md`
 - `docs/api-contracts.md`
 
-## Local Notes
-- The user service now expects PostgreSQL credentials through `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, and `PGDATABASE`.
-- The reading service uses the same PostgreSQL variables and shared `JWT_SECRET` for protected routes.
-- The analytics service also uses PostgreSQL plus the shared `JWT_SECRET` so it can compute user-specific metrics from authenticated requests.
-- `docker-compose.yml` sets those values automatically for containerized runs.
-- If you run the user service directly after pulling recent changes, run `npm install` inside `services/user-service/` to install the `pg` dependency.
-- If you run the reading service directly after pulling recent changes, activate its virtualenv and run `pip install -r requirements.txt` inside `services/reading-service/`.
-- If you run the analytics service directly after pulling recent changes, activate its virtualenv and run `pip install -r requirements.txt` inside `services/analytics-service/`.
+## Current Status
+
+The core full-stack flow is working today:
+
+- account creation and login
+- authenticated user session handling
+- book search and shelf saves
+- reviews
+- analytics summary
+- recommendations
+- routed frontend pages
+
+Some parts of the original long-term vision are still planned rather than fully implemented, especially deeper community features, more advanced event-driven workflows, CI/CD polish, and production observability.
+
+## Next Steps
+
+- Expand the community layer with richer profiles and follow/unfollow flows
+- Improve the feed with more realistic social activity
+- Add automated tests for key frontend and backend flows
+- Add CI/CD polish and deployment-oriented documentation
