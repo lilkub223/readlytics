@@ -17,11 +17,11 @@ const ANALYTICS_SERVICE_URL = normalizeBaseUrl(
 
 async function request(url, options = {}) {
   const response = await fetch(url, {
+    ...options,
     headers: {
       "Content-Type": "application/json",
       ...(options.headers ?? {}),
     },
-    ...options,
   });
 
   const text = await response.text();
