@@ -105,6 +105,15 @@ export function saveShelfEntry(token, payload) {
   });
 }
 
+export function deleteShelfEntry(token, entryId) {
+  return request(`${READING_SERVICE_URL}/api/shelves/${encodeURIComponent(entryId)}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
 export function saveReview(token, payload) {
   return request(`${READING_SERVICE_URL}/api/reviews`, {
     method: "POST",

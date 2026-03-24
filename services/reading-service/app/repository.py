@@ -127,6 +127,7 @@ def get_shelves_for_user(user_id: str) -> dict:
             {
                 "entryId": str(row["id"]),
                 "bookId": str(row["book_id"]),
+                "status": row["status"],
                 "title": row["title"],
                 "authors": row["authors"],
                 "coverImageUrl": row["cover_image_url"],
@@ -250,6 +251,23 @@ def update_progress(user_id: str, entry_id: str, current_page: int, minutes_read
         "status": shelf_row["status"],
         "currentPage": shelf_row["current_page"],
     }
+
+
+def delete_shelf_entry(user_id: str, entry_id: str) -> bool:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM reading_service.shelf_entries
+                WHERE id = %s AND user_id = %s
+                RETURNING id
+                """,
+                (entry_id, user_id),
+            )
+            row = cur.fetchone()
+        conn.commit()
+
+    return row is not None
 
 
 def upsert_review(user_id: str, book_id: str, rating: int, review_text: str | None) -> dict:

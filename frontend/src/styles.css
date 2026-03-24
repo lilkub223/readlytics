@@ -1360,6 +1360,28 @@ label {
   padding: 18px;
 }
 
+.shelf-entry-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.shelf-entry-copy span {
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+
+.shelf-entry-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.shelf-entry-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .recommendation-copy {
   display: grid;
   gap: 8px;
@@ -1698,6 +1720,10 @@ label {
   }
 
   .button-row {
+    flex-direction: column;
+  }
+
+  .shelf-entry-button-row {
     flex-direction: column;
   }
 

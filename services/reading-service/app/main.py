@@ -10,6 +10,7 @@ from app.config import settings
 from app.db import ensure_database_schema, get_database_health
 from app.external_books import search_open_library
 from app.repository import (
+    delete_shelf_entry,
     get_book,
     get_shelves_for_user,
     list_reviews,
@@ -123,6 +124,16 @@ def patch_progress(entry_id: str, payload: ProgressPayload, current_user_id: Cur
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shelf entry not found.")
 
     return {"message": "Progress updated.", "entry": entry}
+
+
+@app.delete("/api/shelves/{entry_id}")
+def remove_shelf_entry(entry_id: str, current_user_id: CurrentUserId):
+    deleted = delete_shelf_entry(current_user_id, entry_id)
+
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shelf entry not found.")
+
+    return {"message": "Shelf entry removed."}
 
 
 @app.post("/api/reviews")

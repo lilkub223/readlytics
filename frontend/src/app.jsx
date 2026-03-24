@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 
 import {
+  deleteShelfEntry,
   followUser,
   getAnalyticsSummary,
   getCurrentUser,
@@ -151,6 +152,22 @@ function getInitials(name = "") {
 
 function formatRatingStars(rating) {
   return `${"★".repeat(rating)}${"☆".repeat(Math.max(0, 5 - rating))}`;
+}
+
+function getShelfProgressLabel(entry) {
+  if (entry.status === "currently_reading") {
+    return entry.currentPage > 0 ? `On page ${entry.currentPage}` : "Just getting started";
+  }
+
+  if (entry.status === "finished") {
+    return "Finished";
+  }
+
+  if (entry.status === "did_not_finish") {
+    return entry.currentPage > 0 ? `Stopped at page ${entry.currentPage}` : "Did not finish";
+  }
+
+  return "Ready to start";
 }
 
 function SiteHeader({ pathname, user, onLogin, onRegister, onSignOut }) {
@@ -619,6 +636,7 @@ function InsightsPanel({ token, analytics }) {
 }
 
 function DiscoverPanel({
+  shelfActionState,
   token,
   recentSearches,
   reviewSaveState,
@@ -626,7 +644,6 @@ function DiscoverPanel({
   searchQuery,
   searchResults,
   searchState,
-  shelfMessage,
   onReviewDraftChange,
   setSearchQuery,
   onSearch,
@@ -668,7 +685,6 @@ function DiscoverPanel({
       </div>
 
       {searchState.error ? <p className="error-text">{searchState.error}</p> : null}
-      {shelfMessage ? <p className="success-text">{shelfMessage}</p> : null}
 
       <div className="search-results-shell">
         {searchState.loading ? (
@@ -698,6 +714,7 @@ function DiscoverPanel({
             {searchResults.map((book) => {
               const reviewDraft = reviewDrafts[book.id] ?? { rating: "", reviewText: "" };
               const saveState = reviewSaveState[book.id];
+              const shelfState = shelfActionState[book.id];
 
               return (
                 <article key={book.id} className="book-card">
@@ -725,6 +742,7 @@ function DiscoverPanel({
                         <button
                           key={option.value}
                           className="secondary-button"
+                          disabled={shelfState?.status === "saving"}
                           type="button"
                           onClick={() => onShelfSave(book.id, option.value)}
                         >
@@ -732,6 +750,12 @@ function DiscoverPanel({
                         </button>
                       ))}
                     </div>
+
+                    {shelfState?.message ? (
+                      <p className={shelfState.status === "error" ? "error-text review-feedback" : "success-text review-feedback"}>
+                        {shelfState.message}
+                      </p>
+                    ) : null}
 
                     <div className="review-row">
                       <select
@@ -793,7 +817,16 @@ function DiscoverPanel({
   );
 }
 
-function LibraryPanel({ shelves, token, onRefresh }) {
+function LibraryPanel({
+  shelves,
+  shelfDrafts,
+  shelfActionState,
+  token,
+  onRefresh,
+  onShelfDelete,
+  onShelfDraftChange,
+  onShelfMove,
+}) {
   return (
     <article className="panel wide-panel reveal-section">
       <div className="panel-header">
@@ -823,9 +856,56 @@ function LibraryPanel({ shelves, token, onRefresh }) {
               {entries.length ? (
                 entries.map((entry) => (
                   <article key={entry.entryId} className="shelf-entry">
-                    <strong>{entry.title}</strong>
-                    <span>{(entry.authors ?? []).join(", ")}</span>
-                    <span>Current page: {entry.currentPage}</span>
+                    <div className="shelf-entry-copy">
+                      <strong>{entry.title}</strong>
+                      <span>{(entry.authors ?? []).join(", ")}</span>
+                      <span>{getShelfProgressLabel(entry)}</span>
+                    </div>
+                    <div className="shelf-entry-actions">
+                      <select
+                        value={shelfDrafts[entry.entryId] ?? entry.status}
+                        onChange={(event) => onShelfDraftChange(entry.entryId, event.target.value)}
+                      >
+                        {SHELF_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="shelf-entry-button-row">
+                        <button
+                          className="secondary-button"
+                          disabled={
+                            !token ||
+                            shelfActionState[entry.entryId]?.status === "saving" ||
+                            (shelfDrafts[entry.entryId] ?? entry.status) === entry.status
+                          }
+                          type="button"
+                          onClick={() => onShelfMove(entry)}
+                        >
+                          {shelfActionState[entry.entryId]?.status === "saving" ? "Updating..." : "Update Shelf"}
+                        </button>
+                        <button
+                          className="ghost-button"
+                          disabled={!token || shelfActionState[entry.entryId]?.status === "saving"}
+                          type="button"
+                          onClick={() => onShelfDelete(entry)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      {shelfActionState[entry.entryId]?.message ? (
+                        <p
+                          className={
+                            shelfActionState[entry.entryId].status === "error"
+                              ? "error-text review-feedback"
+                              : "success-text review-feedback"
+                          }
+                        >
+                          {shelfActionState[entry.entryId].message}
+                        </p>
+                      ) : null}
+                    </div>
                   </article>
                 ))
               ) : (
@@ -1273,7 +1353,20 @@ function AuthPage(props) {
   );
 }
 
-function DashboardPage({ analytics, recommendations, reviews, shelves, token, onRefresh, user }) {
+function DashboardPage({
+  analytics,
+  recommendations,
+  reviews,
+  shelves,
+  shelfActionState,
+  shelfDrafts,
+  token,
+  onRefresh,
+  onShelfDelete,
+  onShelfDraftChange,
+  onShelfMove,
+  user,
+}) {
   return (
     <div className="content-stack">
       <PageBanner
@@ -1293,7 +1386,16 @@ function DashboardPage({ analytics, recommendations, reviews, shelves, token, on
       />
       <section className="layout-grid">
         <InsightsPanel token={token} analytics={analytics} />
-        <LibraryPanel shelves={shelves} token={token} onRefresh={onRefresh} />
+        <LibraryPanel
+          shelves={shelves}
+          shelfDrafts={shelfDrafts}
+          shelfActionState={shelfActionState}
+          token={token}
+          onRefresh={onRefresh}
+          onShelfDelete={onShelfDelete}
+          onShelfDraftChange={onShelfDraftChange}
+          onShelfMove={onShelfMove}
+        />
         <RecentReviewsPanel token={token} reviews={reviews} />
         <RecommendationsPanel token={token} recommendations={recommendations} />
       </section>
@@ -1381,7 +1483,9 @@ export default function App() {
     finished: [],
     did_not_finish: [],
   });
-  const [shelfMessage, setShelfMessage] = useState("");
+  const [discoverShelfState, setDiscoverShelfState] = useState({});
+  const [libraryShelfDrafts, setLibraryShelfDrafts] = useState({});
+  const [libraryShelfState, setLibraryShelfState] = useState({});
   const [reviewSaveState, setReviewSaveState] = useState({});
   const [reviewDrafts, setReviewDrafts] = useState(DEFAULT_REVIEW_DRAFTS);
   const [personalReviews, setPersonalReviews] = useState([]);
@@ -1485,6 +1589,9 @@ export default function App() {
       setCommunityProfile(null);
       setCommunityReviews([]);
       setCommunityState(DEFAULT_COMMUNITY_STATE);
+      setDiscoverShelfState({});
+      setLibraryShelfDrafts({});
+      setLibraryShelfState({});
       setReviewSaveState({});
       window.localStorage.removeItem("book-platform-token");
       return;
@@ -1583,6 +1690,13 @@ export default function App() {
     const nextReviews = reviewPayload.reviews ?? [];
     setShelves(shelfData);
     setPersonalReviews(nextReviews);
+    setLibraryShelfDrafts(
+      Object.fromEntries(
+        Object.values(shelfData)
+          .flat()
+          .map((entry) => [entry.entryId, entry.status])
+      )
+    );
 
     if (currentUser?.id && communityProfile?.id === currentUser.id) {
       setCommunityReviews(nextReviews);
@@ -1607,6 +1721,23 @@ export default function App() {
 
       const next = { ...current };
       delete next[bookId];
+      return next;
+    });
+  }
+
+  function handleLibraryShelfDraftChange(entryId, value) {
+    setLibraryShelfDrafts((current) => ({
+      ...current,
+      [entryId]: value,
+    }));
+
+    setLibraryShelfState((current) => {
+      if (!current[entryId]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[entryId];
       return next;
     });
   }
@@ -1714,11 +1845,115 @@ export default function App() {
     }
 
     try {
-      await saveShelfEntry(token, { bookId, status, currentPage: status === "currently_reading" ? 42 : 0 });
+      setDiscoverShelfState((current) => ({
+        ...current,
+        [bookId]: {
+          status: "saving",
+          message: `Saving to ${formatShelfName(status)}...`,
+        },
+      }));
+      await saveShelfEntry(token, { bookId, status, currentPage: status === "currently_reading" ? 1 : 0 });
       await refreshPersonalizedData();
-      setShelfMessage(`Saved to ${formatShelfName(status)}.`);
+      setDiscoverShelfState((current) => ({
+        ...current,
+        [bookId]: {
+          status: "saved",
+          message: `Saved to ${formatShelfName(status)}.`,
+        },
+      }));
     } catch (error) {
-      setShelfMessage(error.message);
+      setDiscoverShelfState((current) => ({
+        ...current,
+        [bookId]: {
+          status: "error",
+          message: error.message,
+        },
+      }));
+    }
+  }
+
+  async function handleLibraryShelfMove(entry) {
+    if (!token) {
+      navigate(ROUTES.login);
+      return;
+    }
+
+    const nextStatus = libraryShelfDrafts[entry.entryId] ?? entry.status;
+
+    if (nextStatus === entry.status) {
+      setLibraryShelfState((current) => ({
+        ...current,
+        [entry.entryId]: {
+          status: "error",
+          message: "Choose a different shelf before updating.",
+        },
+      }));
+      return;
+    }
+
+    try {
+      setLibraryShelfState((current) => ({
+        ...current,
+        [entry.entryId]: {
+          status: "saving",
+          message: `Moving to ${formatShelfName(nextStatus)}...`,
+        },
+      }));
+      await saveShelfEntry(token, {
+        bookId: entry.bookId,
+        status: nextStatus,
+        currentPage: nextStatus === "currently_reading" && entry.currentPage === 0 ? 1 : entry.currentPage,
+      });
+      await refreshPersonalizedData();
+      setLibraryShelfState((current) => ({
+        ...current,
+        [entry.entryId]: {
+          status: "saved",
+          message: `Moved to ${formatShelfName(nextStatus)}.`,
+        },
+      }));
+    } catch (error) {
+      setLibraryShelfState((current) => ({
+        ...current,
+        [entry.entryId]: {
+          status: "error",
+          message: error.message,
+        },
+      }));
+    }
+  }
+
+  async function handleLibraryShelfDelete(entry) {
+    if (!token) {
+      navigate(ROUTES.login);
+      return;
+    }
+
+    try {
+      setLibraryShelfState((current) => ({
+        ...current,
+        [entry.entryId]: {
+          status: "saving",
+          message: "Removing from your library...",
+        },
+      }));
+      await deleteShelfEntry(token, entry.entryId);
+      await refreshPersonalizedData();
+      setLibraryShelfState((current) => ({
+        ...current,
+        [entry.entryId]: {
+          status: "saved",
+          message: "Removed from your library.",
+        },
+      }));
+    } catch (error) {
+      setLibraryShelfState((current) => ({
+        ...current,
+        [entry.entryId]: {
+          status: "error",
+          message: error.message,
+        },
+      }));
     }
   }
 
@@ -1861,7 +2096,6 @@ export default function App() {
 
   function handleSignOut() {
     setToken("");
-    setShelfMessage("");
     setAuthError("");
     setCommunityQuery("");
     setCommunityReviews([]);
@@ -1879,14 +2113,20 @@ export default function App() {
         recommendations={recommendations}
         reviews={personalReviews}
         shelves={shelves}
+        shelfActionState={libraryShelfState}
+        shelfDrafts={libraryShelfDrafts}
         token={token}
         onRefresh={() => refreshPersonalizedData()}
+        onShelfDelete={handleLibraryShelfDelete}
+        onShelfDraftChange={handleLibraryShelfDraftChange}
+        onShelfMove={handleLibraryShelfMove}
         user={user}
       />
     );
   } else if (pathname === ROUTES.discover) {
     content = (
       <DiscoverPage
+        shelfActionState={discoverShelfState}
         token={token}
         recentSearches={recentSearches}
         reviewSaveState={reviewSaveState}
@@ -1894,7 +2134,6 @@ export default function App() {
         searchQuery={searchQuery}
         searchResults={searchResults}
         searchState={searchState}
-        shelfMessage={shelfMessage}
         onReviewDraftChange={handleReviewDraftChange}
         setSearchQuery={setSearchQuery}
         onSearch={handleSearch}
