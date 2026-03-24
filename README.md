@@ -1,6 +1,6 @@
 # Readlytics
 
-Readlytics is a full-stack social book-tracking platform built as a production-style portfolio project. It combines a React frontend with Node.js and Python microservices so users can organize shelves, review books, track reading habits, and explore personalized recommendations.
+Readlytics is a full-stack social book-tracking app. It combines a React frontend with Node.js and Python microservices so readers can organize shelves, track progress, review books, follow other readers, and get personalized recommendations.
 
 ## Live App
 
@@ -137,7 +137,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 4003
 
 ## Deployment
 
-Readlytics is prepared for deployment on [Render](https://render.com/) with the Blueprint file at [`render.yaml`](render.yaml).
+Readlytics is deployed on [Render](https://render.com/) with the Blueprint file at [`render.yaml`](render.yaml).
 
 ### Render Deployment Flow
 
@@ -150,7 +150,7 @@ Readlytics is prepared for deployment on [Render](https://render.com/) with the 
    - one free Postgres database
 5. Review the service names and deploy.
 
-The frontend build receives live backend URLs through Render environment variables, and each backend service auto-initializes the shared Postgres schema on startup. That means the first deploy does not depend on Docker-only database bootstrapping.
+The frontend receives live backend URLs through Render environment variables, and each backend service initializes the shared Postgres schema on startup.
 
 ### Frontend Environment Variables
 
@@ -175,7 +175,7 @@ In Render, the Blueprint sets these for you. For local development, the services
 
 ### Render Notes
 
-- The Blueprint uses free plans so you can deploy the portfolio version without defaulting to paid `starter` instances.
+- The Blueprint uses free plans by default.
 - Free Render Postgres expires after 30 days unless upgraded.
 - Free web services spin down after inactivity, so the first request after idle time can be slow.
 - RabbitMQ is still part of the local architecture, but the current deployed version does not require it because live event-driven features are not wired yet.
@@ -189,7 +189,7 @@ The repository includes a root [`Jenkinsfile`](Jenkinsfile) for CI validation. T
 - creates isolated Python virtual environments for the reading and analytics services
 - installs Python dependencies and compiles each FastAPI service for syntax validation
 
-This keeps the CI story honest for the current project state: Jenkins validates the application build and service code, while Render handles live deployment from the main branch.
+Jenkins handles build and validation steps, and Render handles deployment from the main branch.
 
 ## Project Structure
 
@@ -214,7 +214,7 @@ docs/
 
 ## Current Status
 
-The deployed application currently supports the full core flow:
+The deployed application currently supports:
 
 - account creation and login
 - authenticated user session handling
