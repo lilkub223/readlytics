@@ -1,13 +1,13 @@
 # Database Schema
 
 ## Approach
-Use a single PostgreSQL instance for local development, with logical ownership split by service.
+Readlytics uses one PostgreSQL instance with schema-level ownership split by service.
 
 - `user_service` schema: authentication, profiles, social graph
 - `reading_service` schema: books, shelves, progress, reviews
-- `analytics` schema: derived read models for dashboards, recommendations, and feed items
+- `analytics` schema: reserved tables for derived read models and future expansion
 
-This keeps local development simple while still showing clear service boundaries.
+This keeps the deployment simple while still making service ownership clear.
 
 ## user_service.users
 - `id` UUID primary key
@@ -63,6 +63,11 @@ Status values:
 - `finished`
 - `did_not_finish`
 
+Notes:
+- each user can have one shelf entry per book
+- shelf entries are the source of truth for library status
+- `current_page` is actively updated for current reads
+
 ## reading_service.reviews
 - `id` UUID primary key
 - `user_id` UUID not null
@@ -114,4 +119,5 @@ Rules:
 ## Notes
 - The user service is the source of truth for users and follows.
 - The reading service is the source of truth for books, shelf state, reviews, and sessions.
-- The analytics schema stores derived data that can be rebuilt from events.
+- The live analytics endpoints currently compute their responses from `user_service` and `reading_service` data.
+- The `analytics` tables exist for future precomputed or event-driven versions of those responses.

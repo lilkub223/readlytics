@@ -7,7 +7,7 @@ Readlytics is a full-stack social book-tracking app. It combines a React fronten
 - Live site: [https://readlytics-web.onrender.com](https://readlytics-web.onrender.com)
 - Repository: [https://github.com/lilkub223/readlytics](https://github.com/lilkub223/readlytics)
 
-## What It Demonstrates
+## Highlights
 
 - Frontend development with React, JavaScript, HTML, and CSS
 - API design and integration across multiple backend services
@@ -212,9 +212,9 @@ docs/
 - `docs/database-schema.md`
 - `docs/api-contracts.md`
 
-## Current Status
+## Current Capabilities
 
-The deployed application currently supports:
+The deployed app currently supports:
 
 - account creation and login
 - authenticated user session handling

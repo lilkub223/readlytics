@@ -1,9 +1,13 @@
 # API Contracts
 
+## Notes
+- Routes under `/api/users/me`, `/api/shelves/me`, `/api/analytics/me/*`, and `/api/feed/me` require a Bearer token.
+- Health checks are exposed at `/health` on each service.
+
 ## User Service
 
 ### `POST /api/auth/register`
-Create a new user account.
+Create a new user account and return a token.
 
 Request body:
 - `email`
@@ -25,6 +29,9 @@ Request body:
 Response:
 - `user`
 - `token`
+
+### `GET /api/users/me`
+Return the authenticated user.
 
 ### `GET /api/users/:username`
 Return a public user profile and follow counts.
@@ -58,7 +65,7 @@ Request body:
 - `currentPage`
 
 ### `PATCH /api/shelves/:entryId/progress`
-Update reading progress.
+Update the current page for a shelf entry.
 
 Request body:
 - `currentPage`
@@ -73,8 +80,20 @@ Request body:
 - `rating`
 - `reviewText`
 
+### `DELETE /api/shelves/:entryId`
+Remove a shelf entry from the user's library.
+
 ### `GET /api/reviews/book/:bookId`
 List reviews for a book.
+
+### `GET /api/reviews/me`
+List recent reviews for the authenticated user.
+
+### `GET /api/reviews/users/:userId`
+List recent reviews for a public user profile.
+
+### `DELETE /api/reviews/:reviewId`
+Delete one of the authenticated user's reviews.
 
 ## Analytics Service
 
@@ -93,28 +112,3 @@ Return recommendation cards for the current user.
 
 ### `GET /api/feed/me`
 Return a social activity feed for the current user.
-
-## Event Contracts
-
-### `book_finished`
-- `userId`
-- `bookId`
-- `finishedAt`
-
-### `review_created`
-- `userId`
-- `bookId`
-- `rating`
-- `createdAt`
-
-### `user_followed`
-- `followerId`
-- `followedId`
-- `createdAt`
-
-### `reading_session_logged`
-- `userId`
-- `bookId`
-- `pagesRead`
-- `minutesRead`
-- `sessionDate`

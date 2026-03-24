@@ -1,34 +1,31 @@
-# Project Scope
+# Readlytics Overview
 
-## Concept
-A social book-tracking web app where users can search books, save them to shelves, track reading progress, review books, follow other users, and view simple analytics and recommendations.
+## Product
+Readlytics is a social book-tracking app. Users can search books, save them to shelves, track progress, write reviews, follow other readers, and see basic analytics and recommendations.
 
-## Tech Stack
-- Frontend: React, JavaScript, HTML, CSS
+## Current Stack
+- Frontend: React, JavaScript, HTML, CSS, Vite
 - User service: Node.js, Express
 - Reading service: Python, FastAPI
 - Analytics service: Python, FastAPI
 - Database: PostgreSQL
-- Messaging: RabbitMQ
-- Infrastructure: Docker Compose
-- CI/CD: Jenkins
+- Local infrastructure: Docker Compose, RabbitMQ
+- CI: Jenkinsfile
+- Deployment: Render
 
-## MVP Features
+## Current Feature Set
 - User registration and login
-- User profiles
-- Follow and unfollow users
-- Search books from an external API
-- Add books to shelves
-- Track reading progress
-- Rate and review books
-- Simple social activity feed
-- Reading analytics dashboard
-- Basic book recommendations
+- Public reader profiles
+- Follow and unfollow
+- Book search through the Open Library API
+- Shelf management for `Want to Read`, `Currently Reading`, `Finished`, and `Did Not Finish`
+- Reading progress updates for current reads
+- Reviews, recent reviews, and review deletion
+- Dashboard analytics
+- Personalized recommendations
+- Community feed based on follows
 
-## Non-Goals
-- Mobile app
-- Kafka
-- Advanced machine learning
-- Real-time chat or websockets
-- Extra microservices beyond the scoped three
-- Cloud deployment in the first version
+## Scope Notes
+- The app uses three backend services and one shared Postgres instance.
+- RabbitMQ is still part of the local stack, but the live app does not depend on it yet.
+- The current deployment is a portfolio-scale production sample, not a large multi-environment platform.
