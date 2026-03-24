@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 
 import {
+  deleteReview,
   deleteShelfEntry,
   followUser,
   getAnalyticsSummary,
@@ -18,6 +19,7 @@ import {
   saveShelfEntry,
   searchBooks,
   unfollowUser,
+  updateShelfProgress,
 } from "./api";
 
 const ROUTES = {
@@ -818,6 +820,7 @@ function DiscoverPanel({
 }
 
 function LibraryPanel({
+  pageDrafts,
   shelves,
   shelfDrafts,
   shelfActionState,
@@ -826,6 +829,8 @@ function LibraryPanel({
   onShelfDelete,
   onShelfDraftChange,
   onShelfMove,
+  onPageDraftChange,
+  onProgressUpdate,
 }) {
   return (
     <article className="panel wide-panel reveal-section">
@@ -894,6 +899,29 @@ function LibraryPanel({
                           Remove
                         </button>
                       </div>
+                      {entry.status === "currently_reading" ? (
+                        <div className="shelf-progress-row">
+                          <input
+                            min="1"
+                            step="1"
+                            type="number"
+                            value={pageDrafts[entry.entryId] ?? entry.currentPage ?? 1}
+                            onChange={(event) => onPageDraftChange(entry.entryId, event.target.value)}
+                          />
+                          <button
+                            className="ghost-button"
+                            disabled={
+                              !token ||
+                              shelfActionState[entry.entryId]?.status === "saving" ||
+                              Number(pageDrafts[entry.entryId] ?? entry.currentPage ?? 1) === entry.currentPage
+                            }
+                            type="button"
+                            onClick={() => onProgressUpdate(entry)}
+                          >
+                            Update Page
+                          </button>
+                        </div>
+                      ) : null}
                       {shelfActionState[entry.entryId]?.message ? (
                         <p
                           className={
@@ -924,7 +952,17 @@ function LibraryPanel({
   );
 }
 
-function ReviewCollection({ reviews, emptyTitle, emptyCopy, emptyButtonLabel, emptyButtonVariant, onEmptyAction, compact = false }) {
+function ReviewCollection({
+  reviews,
+  emptyTitle,
+  emptyCopy,
+  emptyButtonLabel,
+  emptyButtonVariant,
+  onDeleteReview,
+  onEmptyAction,
+  reviewActionState = {},
+  compact = false,
+}) {
   if (!reviews.length) {
     return (
       <EmptyState
@@ -961,13 +999,36 @@ function ReviewCollection({ reviews, emptyTitle, emptyCopy, emptyButtonLabel, em
           <p className="review-card-text">
             {review.reviewText?.trim() || "No written note yet, but the rating is saved to this reader's profile."}
           </p>
+          {onDeleteReview ? (
+            <div className="review-card-actions">
+              <button
+                className="ghost-button"
+                disabled={reviewActionState[review.id]?.status === "saving"}
+                type="button"
+                onClick={() => onDeleteReview(review)}
+              >
+                {reviewActionState[review.id]?.status === "saving" ? "Removing..." : "Delete Review"}
+              </button>
+              {reviewActionState[review.id]?.message ? (
+                <p
+                  className={
+                    reviewActionState[review.id].status === "error"
+                      ? "error-text review-feedback"
+                      : "success-text review-feedback"
+                  }
+                >
+                  {reviewActionState[review.id].message}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </article>
       ))}
     </div>
   );
 }
 
-function RecentReviewsPanel({ token, reviews }) {
+function RecentReviewsPanel({ reviewActionState, reviews, token, onDeleteReview }) {
   return (
     <article className="panel wide-panel reveal-section">
       <div className="panel-header">
@@ -979,6 +1040,8 @@ function RecentReviewsPanel({ token, reviews }) {
         </div>
       </div>
       <ReviewCollection
+        onDeleteReview={onDeleteReview}
+        reviewActionState={reviewActionState}
         reviews={reviews}
         emptyTitle={token ? "No reviews yet." : "Your reviews will live here."}
         emptyCopy={
@@ -1355,13 +1418,18 @@ function AuthPage(props) {
 
 function DashboardPage({
   analytics,
+  pageDrafts,
   recommendations,
+  reviewActionState,
   reviews,
   shelves,
   shelfActionState,
   shelfDrafts,
   token,
   onRefresh,
+  onDeleteReview,
+  onPageDraftChange,
+  onProgressUpdate,
   onShelfDelete,
   onShelfDraftChange,
   onShelfMove,
@@ -1387,16 +1455,24 @@ function DashboardPage({
       <section className="layout-grid">
         <InsightsPanel token={token} analytics={analytics} />
         <LibraryPanel
+          pageDrafts={pageDrafts}
           shelves={shelves}
           shelfDrafts={shelfDrafts}
           shelfActionState={shelfActionState}
           token={token}
           onRefresh={onRefresh}
+          onPageDraftChange={onPageDraftChange}
+          onProgressUpdate={onProgressUpdate}
           onShelfDelete={onShelfDelete}
           onShelfDraftChange={onShelfDraftChange}
           onShelfMove={onShelfMove}
         />
-        <RecentReviewsPanel token={token} reviews={reviews} />
+        <RecentReviewsPanel
+          reviewActionState={reviewActionState}
+          token={token}
+          reviews={reviews}
+          onDeleteReview={onDeleteReview}
+        />
         <RecommendationsPanel token={token} recommendations={recommendations} />
       </section>
     </div>
@@ -1484,9 +1560,11 @@ export default function App() {
     did_not_finish: [],
   });
   const [discoverShelfState, setDiscoverShelfState] = useState({});
+  const [libraryPageDrafts, setLibraryPageDrafts] = useState({});
   const [libraryShelfDrafts, setLibraryShelfDrafts] = useState({});
   const [libraryShelfState, setLibraryShelfState] = useState({});
   const [reviewSaveState, setReviewSaveState] = useState({});
+  const [reviewActionState, setReviewActionState] = useState({});
   const [reviewDrafts, setReviewDrafts] = useState(DEFAULT_REVIEW_DRAFTS);
   const [personalReviews, setPersonalReviews] = useState([]);
   const [analytics, setAnalytics] = useState(null);
@@ -1590,8 +1668,10 @@ export default function App() {
       setCommunityReviews([]);
       setCommunityState(DEFAULT_COMMUNITY_STATE);
       setDiscoverShelfState({});
+      setLibraryPageDrafts({});
       setLibraryShelfDrafts({});
       setLibraryShelfState({});
+      setReviewActionState({});
       setReviewSaveState({});
       window.localStorage.removeItem("book-platform-token");
       return;
@@ -1697,6 +1777,13 @@ export default function App() {
           .map((entry) => [entry.entryId, entry.status])
       )
     );
+    setLibraryPageDrafts(
+      Object.fromEntries(
+        Object.values(shelfData)
+          .flat()
+          .map((entry) => [entry.entryId, entry.currentPage || 1])
+      )
+    );
 
     if (currentUser?.id && communityProfile?.id === currentUser.id) {
       setCommunityReviews(nextReviews);
@@ -1729,6 +1816,25 @@ export default function App() {
     setLibraryShelfDrafts((current) => ({
       ...current,
       [entryId]: value,
+    }));
+
+    setLibraryShelfState((current) => {
+      if (!current[entryId]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[entryId];
+      return next;
+    });
+  }
+
+  function handleLibraryPageDraftChange(entryId, value) {
+    const numericValue = Number.parseInt(value, 10);
+
+    setLibraryPageDrafts((current) => ({
+      ...current,
+      [entryId]: Number.isNaN(numericValue) ? 1 : Math.max(1, numericValue),
     }));
 
     setLibraryShelfState((current) => {
@@ -1957,6 +2063,64 @@ export default function App() {
     }
   }
 
+  async function handleLibraryProgressUpdate(entry) {
+    if (!token) {
+      navigate(ROUTES.login);
+      return;
+    }
+
+    const nextPage = Number(libraryPageDrafts[entry.entryId] ?? entry.currentPage ?? 1);
+
+    if (!Number.isFinite(nextPage) || nextPage < 1) {
+      setLibraryShelfState((current) => ({
+        ...current,
+        [entry.entryId]: {
+          status: "error",
+          message: "Enter a valid page number.",
+        },
+      }));
+      return;
+    }
+
+    if (nextPage === entry.currentPage) {
+      setLibraryShelfState((current) => ({
+        ...current,
+        [entry.entryId]: {
+          status: "error",
+          message: "Choose a different page number before updating.",
+        },
+      }));
+      return;
+    }
+
+    try {
+      setLibraryShelfState((current) => ({
+        ...current,
+        [entry.entryId]: {
+          status: "saving",
+          message: `Updating to page ${nextPage}...`,
+        },
+      }));
+      await updateShelfProgress(token, entry.entryId, { currentPage: nextPage });
+      await refreshPersonalizedData();
+      setLibraryShelfState((current) => ({
+        ...current,
+        [entry.entryId]: {
+          status: "saved",
+          message: `Current page updated to ${nextPage}.`,
+        },
+      }));
+    } catch (error) {
+      setLibraryShelfState((current) => ({
+        ...current,
+        [entry.entryId]: {
+          status: "error",
+          message: error.message,
+        },
+      }));
+    }
+  }
+
   async function handleReviewSave(bookId) {
     if (!token) {
       setAuthError("Sign in to leave reviews.");
@@ -2002,6 +2166,40 @@ export default function App() {
       setReviewSaveState((current) => ({
         ...current,
         [bookId]: {
+          status: "error",
+          message: error.message,
+        },
+      }));
+    }
+  }
+
+  async function handleDeleteReview(review) {
+    if (!token) {
+      navigate(ROUTES.login);
+      return;
+    }
+
+    try {
+      setReviewActionState((current) => ({
+        ...current,
+        [review.id]: {
+          status: "saving",
+          message: "Removing review...",
+        },
+      }));
+      await deleteReview(token, review.id);
+      await refreshPersonalizedData();
+      setReviewActionState((current) => ({
+        ...current,
+        [review.id]: {
+          status: "saved",
+          message: "Review removed.",
+        },
+      }));
+    } catch (error) {
+      setReviewActionState((current) => ({
+        ...current,
+        [review.id]: {
           status: "error",
           message: error.message,
         },
@@ -2110,13 +2308,18 @@ export default function App() {
     content = (
       <DashboardPage
         analytics={analytics}
+        pageDrafts={libraryPageDrafts}
         recommendations={recommendations}
+        reviewActionState={reviewActionState}
         reviews={personalReviews}
         shelves={shelves}
         shelfActionState={libraryShelfState}
         shelfDrafts={libraryShelfDrafts}
         token={token}
         onRefresh={() => refreshPersonalizedData()}
+        onDeleteReview={handleDeleteReview}
+        onPageDraftChange={handleLibraryPageDraftChange}
+        onProgressUpdate={handleLibraryProgressUpdate}
         onShelfDelete={handleLibraryShelfDelete}
         onShelfDraftChange={handleLibraryShelfDraftChange}
         onShelfMove={handleLibraryShelfMove}

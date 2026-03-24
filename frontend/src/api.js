@@ -114,6 +114,16 @@ export function deleteShelfEntry(token, entryId) {
   });
 }
 
+export function updateShelfProgress(token, entryId, payload) {
+  return request(`${READING_SERVICE_URL}/api/shelves/${encodeURIComponent(entryId)}/progress`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
 export function saveReview(token, payload) {
   return request(`${READING_SERVICE_URL}/api/reviews`, {
     method: "POST",
@@ -121,6 +131,15 @@ export function saveReview(token, payload) {
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
+  });
+}
+
+export function deleteReview(token, reviewId) {
+  return request(`${READING_SERVICE_URL}/api/reviews/${encodeURIComponent(reviewId)}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
   });
 }
 

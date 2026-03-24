@@ -10,6 +10,7 @@ from app.config import settings
 from app.db import ensure_database_schema, get_database_health
 from app.external_books import search_open_library
 from app.repository import (
+    delete_review,
     delete_shelf_entry,
     get_book,
     get_shelves_for_user,
@@ -147,6 +148,16 @@ def create_or_update_review(payload: ReviewPayload, current_user_id: CurrentUser
         "message": "Review saved.",
         "review": upsert_review(current_user_id, payload.bookId, payload.rating, payload.reviewText),
     }
+
+
+@app.delete("/api/reviews/{review_id}")
+def remove_review(review_id: str, current_user_id: CurrentUserId):
+    deleted = delete_review(current_user_id, review_id)
+
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found.")
+
+    return {"message": "Review removed."}
 
 
 @app.get("/api/reviews/book/{book_id}")

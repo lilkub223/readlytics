@@ -299,6 +299,23 @@ def upsert_review(user_id: str, book_id: str, rating: int, review_text: str | No
     }
 
 
+def delete_review(user_id: str, review_id: str) -> bool:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM reading_service.reviews
+                WHERE id = %s AND user_id = %s
+                RETURNING id
+                """,
+                (review_id, user_id),
+            )
+            row = cur.fetchone()
+        conn.commit()
+
+    return row is not None
+
+
 def list_reviews(book_id: str) -> list[dict]:
     with get_connection() as conn:
         with conn.cursor() as cur:

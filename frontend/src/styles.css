@@ -1382,6 +1382,12 @@ label {
   gap: 10px;
 }
 
+.shelf-progress-row {
+  display: grid;
+  grid-template-columns: minmax(0, 120px) auto;
+  gap: 10px;
+}
+
 .recommendation-copy {
   display: grid;
   gap: 8px;
@@ -1415,6 +1421,11 @@ label {
 .review-card-text {
   color: #475569;
   line-height: 1.65;
+}
+
+.review-card-actions {
+  display: grid;
+  gap: 8px;
 }
 
 .muted-text {
@@ -1678,6 +1689,7 @@ label {
 
   .search-row,
   .review-row,
+  .shelf-progress-row,
   .stats-grid,
   .reader-stats,
   .shelf-grid,
