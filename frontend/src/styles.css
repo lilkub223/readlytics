@@ -942,7 +942,8 @@ label {
 .stat-card,
 .book-card,
 .shelf-entry,
-.recommendation-card {
+.recommendation-card,
+.review-card {
   border-radius: var(--radius-inner);
   border: 1px solid rgba(203, 213, 225, 0.8);
   background: rgba(255, 255, 255, 0.88);
@@ -1042,6 +1043,18 @@ label {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.profile-review-block {
+  display: grid;
+  gap: 14px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(203, 213, 225, 0.7);
+}
+
+.profile-review-header {
+  display: grid;
+  gap: 6px;
 }
 
 .tag-row {
@@ -1188,9 +1201,14 @@ label {
 }
 
 .results-grid,
-.recommendation-grid {
+.recommendation-grid,
+.review-list {
   display: grid;
   gap: 16px;
+}
+
+.review-list.is-compact {
+  gap: 12px;
 }
 
 .book-card {
@@ -1202,6 +1220,7 @@ label {
 
 .book-card:hover,
 .recommendation-card:hover,
+.review-card:hover,
 .shelf-entry:hover {
   transform: translateY(-2px);
   box-shadow: 0 18px 38px rgba(15, 23, 42, 0.08);
@@ -1209,7 +1228,8 @@ label {
 }
 
 .book-card-top,
-.recommendation-top {
+.recommendation-top,
+.review-card-top {
   display: grid;
   grid-template-columns: 84px 1fr;
   gap: 18px;
@@ -1217,7 +1237,8 @@ label {
 }
 
 .book-cover-shell,
-.recommendation-cover-shell {
+.recommendation-cover-shell,
+.review-cover-shell {
   position: relative;
   width: 84px;
   aspect-ratio: 2 / 3;
@@ -1231,7 +1252,8 @@ label {
 }
 
 .book-cover-shell::after,
-.recommendation-cover-shell::after {
+.recommendation-cover-shell::after,
+.review-cover-shell::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -1341,6 +1363,36 @@ label {
 .recommendation-copy {
   display: grid;
   gap: 8px;
+}
+
+.review-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.review-card-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.review-card-copy span {
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+
+.review-rating-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #334155;
+  font-size: 0.9rem;
+}
+
+.review-card-text {
+  color: #475569;
+  line-height: 1.65;
 }
 
 .muted-text {
@@ -1459,6 +1511,11 @@ label {
 .success-text {
   margin: 10px 0 0;
   color: #047857;
+}
+
+.review-feedback {
+  margin-top: 0;
+  font-size: 0.9rem;
 }
 
 .error-text {
@@ -1602,7 +1659,8 @@ label {
   .stats-grid,
   .reader-stats,
   .shelf-grid,
-  .hero-feature-grid {
+  .hero-feature-grid,
+  .review-card-top {
     grid-template-columns: 1fr;
   }
 
@@ -1644,12 +1702,14 @@ label {
   }
 
   .book-card-top,
-  .recommendation-top {
+  .recommendation-top,
+  .review-card-top {
     grid-template-columns: 1fr;
   }
 
   .book-cover-shell,
-  .recommendation-cover-shell {
+  .recommendation-cover-shell,
+  .review-cover-shell {
     width: 100%;
     max-width: 120px;
   }

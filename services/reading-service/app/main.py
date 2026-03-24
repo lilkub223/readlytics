@@ -13,6 +13,7 @@ from app.repository import (
     get_book,
     get_shelves_for_user,
     list_reviews,
+    list_reviews_for_user,
     search_cached_books,
     upsert_book,
     upsert_review,
@@ -140,3 +141,13 @@ def create_or_update_review(payload: ReviewPayload, current_user_id: CurrentUser
 @app.get("/api/reviews/book/{book_id}")
 def get_book_reviews(book_id: str):
     return {"bookId": book_id, "reviews": list_reviews(book_id)}
+
+
+@app.get("/api/reviews/me")
+def get_my_reviews(current_user_id: CurrentUserId):
+    return {"userId": current_user_id, "reviews": list_reviews_for_user(current_user_id)}
+
+
+@app.get("/api/reviews/users/{user_id}")
+def get_reviews_for_user(user_id: str):
+    return {"userId": user_id, "reviews": list_reviews_for_user(user_id)}

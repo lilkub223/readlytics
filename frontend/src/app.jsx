@@ -5,10 +5,12 @@ import {
   getAnalyticsSummary,
   getCurrentUser,
   getFeed,
+  getMyReviews,
   getFollowing,
   getRecommendations,
   getShelves,
   getUserProfile,
+  getUserReviews,
   loginUser,
   registerUser,
   saveReview,
@@ -145,6 +147,10 @@ function getInitials(name = "") {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
+}
+
+function formatRatingStars(rating) {
+  return `${"★".repeat(rating)}${"☆".repeat(Math.max(0, 5 - rating))}`;
 }
 
 function SiteHeader({ pathname, user, onLogin, onRegister, onSignOut }) {
@@ -615,13 +621,14 @@ function InsightsPanel({ token, analytics }) {
 function DiscoverPanel({
   token,
   recentSearches,
+  reviewSaveState,
   reviewDrafts,
   searchQuery,
   searchResults,
   searchState,
   shelfMessage,
+  onReviewDraftChange,
   setSearchQuery,
-  setReviewDrafts,
   onSearch,
   onSuggestionSelect,
   onShelfSave,
@@ -690,6 +697,7 @@ function DiscoverPanel({
           <div className="results-grid">
             {searchResults.map((book) => {
               const reviewDraft = reviewDrafts[book.id] ?? { rating: "", reviewText: "" };
+              const saveState = reviewSaveState[book.id];
 
               return (
                 <article key={book.id} className="book-card">
@@ -728,15 +736,7 @@ function DiscoverPanel({
                     <div className="review-row">
                       <select
                         value={reviewDraft.rating}
-                        onChange={(event) =>
-                          setReviewDrafts((current) => ({
-                            ...current,
-                            [book.id]: {
-                              ...reviewDraft,
-                              rating: event.target.value,
-                            },
-                          }))
-                        }
+                        onChange={(event) => onReviewDraftChange(book.id, "rating", event.target.value)}
                       >
                         <option value="">Rating</option>
                         {[1, 2, 3, 4, 5].map((rating) => (
@@ -747,21 +747,27 @@ function DiscoverPanel({
                       </select>
                       <input
                         value={reviewDraft.reviewText}
-                        onChange={(event) =>
-                          setReviewDrafts((current) => ({
-                            ...current,
-                            [book.id]: {
-                              ...reviewDraft,
-                              reviewText: event.target.value,
-                            },
-                          }))
-                        }
+                        onChange={(event) => onReviewDraftChange(book.id, "reviewText", event.target.value)}
                         placeholder="Quick review"
                       />
-                      <button className="ghost-button" type="button" onClick={() => onReviewSave(book.id)}>
-                        Save Review
+                      <button
+                        className="ghost-button"
+                        disabled={saveState?.status === "saving"}
+                        type="button"
+                        onClick={() => onReviewSave(book.id)}
+                      >
+                        {saveState?.status === "saving"
+                          ? "Saving..."
+                          : saveState?.status === "saved"
+                            ? "Saved"
+                            : "Save Review"}
                       </button>
                     </div>
+                    {saveState?.message ? (
+                      <p className={saveState.status === "error" ? "error-text review-feedback" : "success-text review-feedback"}>
+                        {saveState.message}
+                      </p>
+                    ) : null}
                   </div>
                 </article>
               );
@@ -838,6 +844,76 @@ function LibraryPanel({ shelves, token, onRefresh }) {
   );
 }
 
+function ReviewCollection({ reviews, emptyTitle, emptyCopy, emptyButtonLabel, emptyButtonVariant, onEmptyAction, compact = false }) {
+  if (!reviews.length) {
+    return (
+      <EmptyState
+        title={emptyTitle}
+        copy={emptyCopy}
+        buttonLabel={emptyButtonLabel}
+        buttonVariant={emptyButtonVariant}
+        onButtonClick={onEmptyAction}
+      />
+    );
+  }
+
+  return (
+    <div className={`review-list ${compact ? "is-compact" : ""}`.trim()}>
+      {reviews.map((review) => (
+        <article key={review.id} className="review-card">
+          <div className="review-card-top">
+            <div className="review-cover-shell">
+              {review.coverImageUrl ? (
+                <img className="book-cover-image" src={review.coverImageUrl} alt={`Cover for ${review.title}`} />
+              ) : (
+                <div className="book-cover-fallback">RL</div>
+              )}
+            </div>
+            <div className="review-card-copy">
+              <strong>{review.title}</strong>
+              <span>{(review.authors ?? []).join(", ") || "Unknown author"}</span>
+              <div className="review-rating-row">
+                <span className="pill">{formatRatingStars(review.rating)}</span>
+                <span>{review.rating} / 5</span>
+              </div>
+            </div>
+          </div>
+          <p className="review-card-text">
+            {review.reviewText?.trim() || "No written note yet, but the rating is saved to this reader's profile."}
+          </p>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function RecentReviewsPanel({ token, reviews }) {
+  return (
+    <article className="panel wide-panel reveal-section">
+      <div className="panel-header">
+        <div>
+          <h2>Recent Reviews</h2>
+          <p className="panel-description">
+            The books you&apos;ve rated and the quick notes you&apos;ve left along the way.
+          </p>
+        </div>
+      </div>
+      <ReviewCollection
+        reviews={reviews}
+        emptyTitle={token ? "No reviews yet." : "Your reviews will live here."}
+        emptyCopy={
+          token
+            ? "Rate a book and add a quick note to start building your public reading profile."
+            : "Sign in to save ratings and build a profile that reflects your reading taste."
+        }
+        emptyButtonLabel={token ? "Discover Books" : "Log In"}
+        emptyButtonVariant={token ? "ghost" : "primary"}
+        onEmptyAction={() => navigate(token ? ROUTES.discover : ROUTES.login)}
+      />
+    </article>
+  );
+}
+
 function RecommendationsPanel({ token, recommendations }) {
   return (
     <article className="panel wide-panel reveal-section">
@@ -907,6 +983,7 @@ function RecommendationsPanel({ token, recommendations }) {
 
 function CommunityPanel({
   communityProfile,
+  communityReviews,
   communityQuery,
   communityState,
   feedItems,
@@ -1001,6 +1078,21 @@ function CommunityPanel({
                     Log In to Follow
                   </button>
                 )}
+              </div>
+
+              <div className="profile-review-block">
+                <div className="profile-review-header">
+                  <h3>Recent Reviews</h3>
+                  <p className="muted-text small-text">
+                    A quick look at what this reader has rated and written about recently.
+                  </p>
+                </div>
+                <ReviewCollection
+                  compact
+                  reviews={communityReviews}
+                  emptyTitle="No reviews on this profile yet."
+                  emptyCopy="Once this reader starts rating books, their recent thoughts will show up here."
+                />
               </div>
             </article>
           ) : (
@@ -1181,7 +1273,7 @@ function AuthPage(props) {
   );
 }
 
-function DashboardPage({ analytics, recommendations, shelves, token, onRefresh, onSignOut, user }) {
+function DashboardPage({ analytics, recommendations, reviews, shelves, token, onRefresh, user }) {
   return (
     <div className="content-stack">
       <PageBanner
@@ -1202,6 +1294,7 @@ function DashboardPage({ analytics, recommendations, shelves, token, onRefresh, 
       <section className="layout-grid">
         <InsightsPanel token={token} analytics={analytics} />
         <LibraryPanel shelves={shelves} token={token} onRefresh={onRefresh} />
+        <RecentReviewsPanel token={token} reviews={reviews} />
         <RecommendationsPanel token={token} recommendations={recommendations} />
       </section>
     </div>
@@ -1289,12 +1382,15 @@ export default function App() {
     did_not_finish: [],
   });
   const [shelfMessage, setShelfMessage] = useState("");
+  const [reviewSaveState, setReviewSaveState] = useState({});
   const [reviewDrafts, setReviewDrafts] = useState(DEFAULT_REVIEW_DRAFTS);
+  const [personalReviews, setPersonalReviews] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
   const [feedItems, setFeedItems] = useState([]);
   const [communityQuery, setCommunityQuery] = useState("");
   const [communityProfile, setCommunityProfile] = useState(null);
+  const [communityReviews, setCommunityReviews] = useState([]);
   const [communityState, setCommunityState] = useState(DEFAULT_COMMUNITY_STATE);
   const [followingUsers, setFollowingUsers] = useState([]);
 
@@ -1384,9 +1480,12 @@ export default function App() {
       setAnalytics(null);
       setRecommendations([]);
       setFeedItems([]);
+      setPersonalReviews([]);
       setFollowingUsers([]);
       setCommunityProfile(null);
+      setCommunityReviews([]);
       setCommunityState(DEFAULT_COMMUNITY_STATE);
+      setReviewSaveState({});
       window.localStorage.removeItem("book-platform-token");
       return;
     }
@@ -1397,15 +1496,14 @@ export default function App() {
 
     async function loadAuthenticatedState() {
       try {
-        const [{ user: currentUser }, shelfData] = await Promise.all([getCurrentUser(token), getShelves(token)]);
+        const { user: currentUser } = await getCurrentUser(token);
 
         if (!cancelled) {
           setUser(currentUser);
-          setShelves(shelfData);
         }
 
         if (!cancelled) {
-          await loadInsights(token);
+          await refreshPersonalizedData(token, currentUser);
         }
       } catch (error) {
         if (!cancelled) {
@@ -1476,14 +1574,41 @@ export default function App() {
     }
   }
 
-  async function refreshPersonalizedData(currentToken = token) {
+  async function refreshPersonalizedData(currentToken = token, currentUser = user) {
     if (!currentToken) {
       return;
     }
 
-    const shelfData = await getShelves(currentToken);
+    const [shelfData, reviewPayload] = await Promise.all([getShelves(currentToken), getMyReviews(currentToken)]);
+    const nextReviews = reviewPayload.reviews ?? [];
     setShelves(shelfData);
+    setPersonalReviews(nextReviews);
+
+    if (currentUser?.id && communityProfile?.id === currentUser.id) {
+      setCommunityReviews(nextReviews);
+    }
+
     await loadInsights(currentToken);
+  }
+
+  function handleReviewDraftChange(bookId, field, value) {
+    setReviewDrafts((current) => ({
+      ...current,
+      [bookId]: {
+        ...(current[bookId] ?? { rating: "", reviewText: "" }),
+        [field]: value,
+      },
+    }));
+
+    setReviewSaveState((current) => {
+      if (!current[bookId]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[bookId];
+      return next;
+    });
   }
 
   async function refreshFollowingUsers(currentUserId = user?.id) {
@@ -1607,20 +1732,45 @@ export default function App() {
     const draft = reviewDrafts[bookId];
 
     if (!draft?.rating) {
-      setShelfMessage("Choose a rating before saving a review.");
+      setReviewSaveState((current) => ({
+        ...current,
+        [bookId]: {
+          status: "error",
+          message: "Choose a rating before saving your review.",
+        },
+      }));
       return;
     }
 
     try {
+      setReviewSaveState((current) => ({
+        ...current,
+        [bookId]: {
+          status: "saving",
+          message: "Saving your review...",
+        },
+      }));
       await saveReview(token, {
         bookId,
         rating: Number(draft.rating),
         reviewText: draft.reviewText ?? "",
       });
       await refreshPersonalizedData();
-      setShelfMessage("Review saved.");
+      setReviewSaveState((current) => ({
+        ...current,
+        [bookId]: {
+          status: "saved",
+          message: "Review saved to your profile.",
+        },
+      }));
     } catch (error) {
-      setShelfMessage(error.message);
+      setReviewSaveState((current) => ({
+        ...current,
+        [bookId]: {
+          status: "error",
+          message: error.message,
+        },
+      }));
     }
   }
 
@@ -1645,7 +1795,9 @@ export default function App() {
 
     try {
       const payload = await getUserProfile(normalizedUsername);
+      const reviewPayload = await getUserReviews(payload.profile.id);
       setCommunityProfile(payload.profile);
+      setCommunityReviews(reviewPayload.reviews ?? []);
       setCommunityQuery(payload.profile.username);
       setCommunityState({
         loading: false,
@@ -1654,6 +1806,7 @@ export default function App() {
       });
     } catch (error) {
       setCommunityProfile(null);
+      setCommunityReviews([]);
       setCommunityState({
         loading: false,
         error: error.message,
@@ -1691,13 +1844,15 @@ export default function App() {
         await followUser(token, profile.id);
       }
 
-      const [profilePayload] = await Promise.all([
+      const [profilePayload, reviewPayload] = await Promise.all([
         getUserProfile(profile.username),
+        getUserReviews(profile.id),
         refreshFollowingUsers(),
         loadInsights(token),
       ]);
 
       setCommunityProfile(profilePayload.profile);
+      setCommunityReviews(reviewPayload.reviews ?? []);
       setCommunityState((current) => ({ ...current, actionLoading: false, error: "" }));
     } catch (error) {
       setCommunityState((current) => ({ ...current, actionLoading: false, error: error.message }));
@@ -1709,6 +1864,7 @@ export default function App() {
     setShelfMessage("");
     setAuthError("");
     setCommunityQuery("");
+    setCommunityReviews([]);
     navigate(ROUTES.about);
   }
 
@@ -1721,10 +1877,10 @@ export default function App() {
       <DashboardPage
         analytics={analytics}
         recommendations={recommendations}
+        reviews={personalReviews}
         shelves={shelves}
         token={token}
         onRefresh={() => refreshPersonalizedData()}
-        onSignOut={handleSignOut}
         user={user}
       />
     );
@@ -1733,13 +1889,14 @@ export default function App() {
       <DiscoverPage
         token={token}
         recentSearches={recentSearches}
+        reviewSaveState={reviewSaveState}
         reviewDrafts={reviewDrafts}
         searchQuery={searchQuery}
         searchResults={searchResults}
         searchState={searchState}
         shelfMessage={shelfMessage}
+        onReviewDraftChange={handleReviewDraftChange}
         setSearchQuery={setSearchQuery}
-        setReviewDrafts={setReviewDrafts}
         onSearch={handleSearch}
         onSuggestionSelect={handleSuggestionSelect}
         onShelfSave={handleShelfSave}
@@ -1750,6 +1907,7 @@ export default function App() {
     content = (
       <CommunityPage
         communityProfile={communityProfile}
+        communityReviews={communityReviews}
         communityQuery={communityQuery}
         communityState={communityState}
         feedItems={feedItems}

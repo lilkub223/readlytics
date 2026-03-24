@@ -305,3 +305,46 @@ def list_reviews(book_id: str) -> list[dict]:
         }
         for row in rows
     ]
+
+
+def list_reviews_for_user(user_id: str, limit: int = 6) -> list[dict]:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    r.id,
+                    r.user_id,
+                    r.book_id,
+                    r.rating,
+                    r.review_text,
+                    r.created_at,
+                    r.updated_at,
+                    b.title,
+                    b.authors,
+                    b.cover_image_url
+                FROM reading_service.reviews r
+                JOIN reading_service.books b ON b.id = r.book_id
+                WHERE r.user_id = %s
+                ORDER BY r.updated_at DESC
+                LIMIT %s
+                """,
+                (user_id, limit),
+            )
+            rows = cur.fetchall()
+
+    return [
+        {
+            "id": str(row["id"]),
+            "userId": row["user_id"],
+            "bookId": str(row["book_id"]),
+            "title": row["title"],
+            "authors": row["authors"],
+            "coverImageUrl": row["cover_image_url"],
+            "rating": row["rating"],
+            "reviewText": row["review_text"],
+            "createdAt": row["created_at"],
+            "updatedAt": row["updated_at"],
+        }
+        for row in rows
+    ]

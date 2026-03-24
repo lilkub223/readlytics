@@ -115,6 +115,18 @@ export function saveReview(token, payload) {
   });
 }
 
+export function getMyReviews(token) {
+  return request(`${READING_SERVICE_URL}/api/reviews/me`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
+export function getUserReviews(userId) {
+  return request(`${READING_SERVICE_URL}/api/reviews/users/${encodeURIComponent(userId)}`);
+}
+
 export function getAnalyticsSummary(token) {
   return request(`${ANALYTICS_SERVICE_URL}/api/analytics/me/summary`, {
     headers: {
