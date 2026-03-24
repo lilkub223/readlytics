@@ -2,6 +2,11 @@
 
 Readlytics is a full-stack social book-tracking platform built as a production-style portfolio project. It combines a React frontend with Node.js and Python microservices so users can organize shelves, review books, track reading habits, and explore personalized recommendations.
 
+## Live App
+
+- Live site: [https://readlytics-web.onrender.com](https://readlytics-web.onrender.com)
+- Repository: [https://github.com/lilkub223/readlytics](https://github.com/lilkub223/readlytics)
+
 ## What It Demonstrates
 
 - Frontend development with React, JavaScript, HTML, and CSS
@@ -9,6 +14,7 @@ Readlytics is a full-stack social book-tracking platform built as a production-s
 - Microservice boundaries using Node.js and Python
 - PostgreSQL data modeling and authenticated service behavior
 - Docker-based local orchestration
+- Cloud deployment with Render
 - Git-based workflow in a Linux/Unix-style development environment
 
 ## Current Features
@@ -17,9 +23,12 @@ Readlytics is a full-stack social book-tracking platform built as a production-s
 - Multi-page product UI with dedicated About, Features, Dashboard, Discover, Community, Login, and Register views
 - Book search powered by the Open Library API
 - Shelves for `Want to Read`, `Currently Reading`, `Finished`, and `Did Not Finish`
-- Ratings and quick reviews
+- Shelf management from the dashboard, including moving books between shelves and removing entries
+- Reading progress updates for `Currently Reading`
+- Ratings and quick reviews with recent-review management
 - Personalized reading dashboard with summary analytics
-- Recommendation and activity-feed foundations
+- Personalized recommendations
+- Follow/unfollow community flow with profile lookups and reader activity feed
 
 ## Architecture
 
@@ -32,7 +41,7 @@ Readlytics is split into focused services:
 | Reading Service | Python + FastAPI | Book search, shelves, reading progress, ratings, and reviews | `4002` |
 | Analytics Service | Python + FastAPI | Reading analytics, recommendations, and activity feed endpoints | `4003` |
 | PostgreSQL | Postgres 16 | Primary application database | `5432` |
-| RabbitMQ | RabbitMQ | Included for planned event-driven extensions | `5672`, `15672` |
+| RabbitMQ | RabbitMQ | Included in local infrastructure for planned event-driven extensions | `5672`, `15672` |
 
 ## Tech Stack
 
@@ -192,21 +201,14 @@ docs/
 
 ## Current Status
 
-The core full-stack flow is working today:
+The deployed application currently supports the full core flow:
 
 - account creation and login
 - authenticated user session handling
-- book search and shelf saves
-- reviews
+- book search and shelf management
+- reading progress updates
+- reviews and review deletion
 - analytics summary
 - recommendations
+- community profiles, follow/unfollow, and activity feed
 - routed frontend pages
-
-Some parts of the original long-term vision are still planned rather than fully implemented, especially deeper community features, more advanced event-driven workflows, CI/CD polish, and production observability.
-
-## Next Steps
-
-- Expand the community layer with richer profiles and follow/unfollow flows
-- Improve the feed with more realistic social activity
-- Add automated tests for key frontend and backend flows
-- Add CI/CD polish and deployment-oriented documentation
