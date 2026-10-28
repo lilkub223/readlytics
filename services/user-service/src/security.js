@@ -17,29 +17,56 @@ function base64UrlEncodeJson(value) {
 }
 
 function base64UrlDecode(value) {
-  const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+  const padded = value
+    .replace(/-/g, "+")
+    .replace(/_/g, "/")
+    .padEnd(Math.ceil(value.length / 4) * 4, "=");
   return Buffer.from(padded, "base64").toString("utf8");
 }
 
 export function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto.pbkdf2Sync(password, salt, HASH_ITERATIONS, HASH_KEY_LENGTH, HASH_ALGORITHM).toString("hex");
+  const hash = crypto
+    .pbkdf2Sync(
+      password,
+      salt,
+      HASH_ITERATIONS,
+      HASH_KEY_LENGTH,
+      HASH_ALGORITHM,
+    )
+    .toString("hex");
 
   return `pbkdf2$${HASH_ITERATIONS}$${salt}$${hash}`;
 }
 
 export function verifyPassword(password, storedHash) {
-  const [scheme, iterations, salt, hash] = storedHash.split("$");
+  const [scheme, iterations, salt, hash] = String(storedHash).split("$");
 
-  if (scheme !== "pbkdf2" || !iterations || !salt || !hash) {
+  if (
+    scheme !== "pbkdf2" ||
+    !/^[0-9]+$/.test(iterations) ||
+    Number(iterations) < 1 ||
+    Number(iterations) > 1000000 ||
+    !salt ||
+    !/^[0-9a-f]{128}$/i.test(hash ?? "")
+  ) {
     return false;
   }
 
   const computedHash = crypto
-    .pbkdf2Sync(password, salt, Number.parseInt(iterations, 10), HASH_KEY_LENGTH, HASH_ALGORITHM)
+    .pbkdf2Sync(
+      password,
+      salt,
+      Number.parseInt(iterations, 10),
+      HASH_KEY_LENGTH,
+      HASH_ALGORITHM,
+    )
     .toString("hex");
 
-  return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(computedHash, "hex"));
+  return crypto.timingSafeEqual(
+    Buffer.from(hash, "hex"),
+    Buffer.from(computedHash, "hex"),
+  );
 }
 
 export function signToken(payload, secret, expiresInSeconds) {
@@ -51,7 +78,10 @@ export function signToken(payload, secret, expiresInSeconds) {
     exp: issuedAt + expiresInSeconds,
   });
   const unsignedToken = `${encodedHeader}.${encodedPayload}`;
-  const signature = crypto.createHmac("sha256", secret).update(unsignedToken).digest("base64url");
+  const signature = crypto
+    .createHmac("sha256", secret)
+    .update(unsignedToken)
+    .digest("base64url");
 
   return `${unsignedToken}.${signature}`;
 }
@@ -65,19 +95,35 @@ export function verifyToken(token, secret) {
 
   const [encodedHeader, encodedPayload, signature] = parts;
   const unsignedToken = `${encodedHeader}.${encodedPayload}`;
-  const expectedSignature = crypto.createHmac("sha256", secret).update(unsignedToken).digest("base64url");
+  const expectedSignature = crypto
+    .createHmac("sha256", secret)
+    .update(unsignedToken)
+    .digest("base64url");
 
-  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
+  if (
+    !/^[A-Za-z0-9_-]{43}$/.test(signature) ||
+    !crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature),
+    )
+  ) {
     throw new Error("Invalid token signature.");
   }
 
   const header = JSON.parse(base64UrlDecode(encodedHeader));
   const payload = JSON.parse(base64UrlDecode(encodedPayload));
 
-  if (header.alg !== "HS256" || payload.exp < Math.floor(Date.now() / 1000)) {
+  if (
+    header.alg !== "HS256" ||
+    !Number.isFinite(payload.exp) ||
+    payload.exp <= Math.floor(Date.now() / 1000) ||
+    typeof payload.sub !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      payload.sub,
+    )
+  ) {
     throw new Error("Token is expired or unsupported.");
   }
 
   return payload;
 }
-

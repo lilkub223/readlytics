@@ -8,7 +8,7 @@ import { config } from "./config.js";
 const { Pool } = pg;
 const schemaPath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../../../infra/docker/init.sql"
+  "../../../infra/docker/init.sql",
 );
 
 const connectionConfig = config.databaseUrl
@@ -21,7 +21,14 @@ const connectionConfig = config.databaseUrl
       database: config.db.database,
     };
 
-export const pool = new Pool(connectionConfig);
+export const pool = new Pool({
+  ...connectionConfig,
+  connectionTimeoutMillis: 5000,
+  query_timeout: 8000,
+  statement_timeout: 8000,
+  max: 10,
+});
+pool.on("error", () => console.error("Idle database connection lost."));
 let schemaInitialization;
 
 export function query(text, params) {
@@ -56,7 +63,7 @@ export async function getDatabaseHealth() {
     return {
       status: "error",
       latencyMs: Date.now() - startedAt,
-      message: error.message,
+      message: "Database unavailable.",
     };
   }
 }

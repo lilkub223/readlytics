@@ -10,14 +10,18 @@ def _build_cover_url(cover_id: int | None) -> str | None:
     return f"https://covers.openlibrary.org/b/id/{cover_id}-L.jpg"
 
 
-def search_open_library(query: str) -> list[dict]:
-    url = f"https://openlibrary.org/search.json?q={quote(query)}&limit=10"
+class UpstreamUnavailable(Exception):
+    pass
+
+
+def search_open_library(query: str, page: int = 1) -> list[dict]:
+    url = f"https://openlibrary.org/search.json?q={quote(query)}&limit=10&page={page}&fields=key,title,author_name,first_publish_year,number_of_pages_median,cover_i,subject"
 
     try:
         with urlopen(url, timeout=5) as response:
             payload = json.load(response)
-    except (TimeoutError, URLError, json.JSONDecodeError):
-        return []
+    except (TimeoutError, URLError, json.JSONDecodeError) as error:
+        raise UpstreamUnavailable("Open Library is temporarily unavailable.") from error
 
     results = []
 
@@ -42,3 +46,18 @@ def search_open_library(query: str) -> list[dict]:
         )
 
     return results
+
+
+def get_work_description(external_id: str) -> str | None:
+    import re
+    if not re.fullmatch(r"/works/OL[0-9]+W", external_id):
+        return None
+    try:
+        with urlopen(f"https://openlibrary.org{external_id}.json", timeout=5) as response:
+            payload = json.load(response)
+        description = payload.get("description")
+        if isinstance(description, dict):
+            description = description.get("value")
+        return description[:30000] if isinstance(description, str) else None
+    except (TimeoutError, URLError, json.JSONDecodeError):
+        return None  # Metadata enrichment is optional; cached book details remain usable.

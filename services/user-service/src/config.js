@@ -1,5 +1,5 @@
 function parseCorsOrigins(value) {
-  return (value ?? "http://localhost:3000")
+  return (value ?? "http://localhost:3000,http://127.0.0.1:3000")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
@@ -8,7 +8,10 @@ function parseCorsOrigins(value) {
 export const config = {
   port: Number.parseInt(process.env.PORT ?? "4001", 10),
   jwtSecret: process.env.JWT_SECRET ?? "dev-secret-change-me",
-  jwtExpiresInSeconds: Number.parseInt(process.env.JWT_EXPIRES_IN_SECONDS ?? "604800", 10),
+  jwtExpiresInSeconds: Number.parseInt(
+    process.env.JWT_EXPIRES_IN_SECONDS ?? "604800",
+    10,
+  ),
   databaseUrl: process.env.DATABASE_URL,
   corsOrigins: parseCorsOrigins(process.env.CORS_ORIGIN),
   db: {

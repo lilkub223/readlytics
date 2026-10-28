@@ -13,14 +13,19 @@ export function mapUser(row) {
   };
 }
 
-export async function createUser({ email, username, passwordHash, displayName }) {
+export async function createUser({
+  email,
+  username,
+  passwordHash,
+  displayName,
+}) {
   const result = await query(
     `
       INSERT INTO user_service.users (email, username, password_hash, display_name)
       VALUES ($1, $2, $3, $4)
       RETURNING id, email, username, display_name, bio, favorite_genres, created_at, updated_at
     `,
-    [email, username, passwordHash, displayName]
+    [email, username, passwordHash, displayName],
   );
 
   return mapUser(result.rows[0]);
@@ -33,7 +38,7 @@ export async function findUserByEmail(email) {
       FROM user_service.users
       WHERE email = $1
     `,
-    [email]
+    [email],
   );
 
   return result.rows[0] ?? null;
@@ -66,7 +71,7 @@ export async function findUserByUsername(username) {
       ) following ON following.follower_id = u.id
       WHERE u.username = $1
     `,
-    [username]
+    [username],
   );
 
   return result.rows[0] ?? null;
@@ -79,7 +84,7 @@ export async function findUserById(id) {
       FROM user_service.users
       WHERE id = $1
     `,
-    [id]
+    [id],
   );
 
   return result.rows[0] ?? null;
@@ -92,7 +97,7 @@ export async function createFollow(followerId, followedId) {
       VALUES ($1, $2)
       ON CONFLICT (follower_id, followed_id) DO NOTHING
     `,
-    [followerId, followedId]
+    [followerId, followedId],
   );
 }
 
@@ -102,7 +107,7 @@ export async function deleteFollow(followerId, followedId) {
       DELETE FROM user_service.follows
       WHERE follower_id = $1 AND followed_id = $2
     `,
-    [followerId, followedId]
+    [followerId, followedId],
   );
 }
 
@@ -115,7 +120,7 @@ export async function listFollowing(userId) {
       WHERE f.follower_id = $1
       ORDER BY u.username
     `,
-    [userId]
+    [userId],
   );
 
   return result.rows.map((row) => ({
@@ -126,3 +131,13 @@ export async function listFollowing(userId) {
   }));
 }
 
+export async function updateUserProfile(
+  userId,
+  { displayName, bio, favoriteGenres },
+) {
+  const result = await query(
+    `UPDATE user_service.users SET display_name=$2, bio=$3, favorite_genres=$4, updated_at=NOW() WHERE id=$1 RETURNING *`,
+    [userId, displayName, bio, favoriteGenres],
+  );
+  return mapUser(result.rows[0]);
+}

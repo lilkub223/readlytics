@@ -1,5 +1,9 @@
 from contextlib import asynccontextmanager
 
+from fastapi.responses import JSONResponse
+from psycopg import OperationalError, InterfaceError
+from psycopg.errors import QueryCanceled
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -30,7 +34,7 @@ app.add_middleware(
 def health():
     database = get_database_health()
     overall = "ok" if database["status"] == "ok" else "degraded"
-    return {"service": "analytics-service", "status": overall, "database": database}
+    return JSONResponse(status_code=200 if overall == "ok" else 503, content={"service": "analytics-service", "status": overall, "database": database})
 
 
 @app.get("/api/analytics/me/summary")
@@ -46,3 +50,10 @@ def recommendations(current_user_id: CurrentUserId):
 @app.get("/api/feed/me")
 def feed(current_user_id: CurrentUserId):
     return {"items": get_feed(current_user_id)}
+
+
+@app.exception_handler(QueryCanceled)
+@app.exception_handler(OperationalError)
+@app.exception_handler(InterfaceError)
+async def database_unavailable(_request, _error):
+    return JSONResponse(status_code=503, content={"detail": "Database temporarily unavailable. Please try again."})

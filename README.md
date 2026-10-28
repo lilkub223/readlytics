@@ -184,10 +184,10 @@ In Render, the Blueprint sets these for you. For local development, the services
 
 The repository includes a root [`Jenkinsfile`](Jenkinsfile) for CI validation. The pipeline:
 
-- installs frontend dependencies and builds the production bundle
-- installs user-service dependencies and runs Node syntax checks
+- installs frontend dependencies, runs behavior/request regression tests, and builds the production bundle
+- installs user-service dependencies, runs authentication regression tests, and checks Node syntax
 - creates isolated Python virtual environments for the reading and analytics services
-- installs Python dependencies and compiles each FastAPI service for syntax validation
+- installs Python/test dependencies, runs both FastAPI regression suites, and checks Python syntax
 
 Jenkins handles build and validation steps, and Render handles deployment from the main branch.
 
@@ -226,3 +226,34 @@ The deployed app currently supports:
 - community profiles, follow/unfollow, and activity feed
 - routed frontend pages
 - live hosting on Render with Jenkins CI configuration in the repository
+
+
+## Redesign and reliability update (October 2026)
+
+The updated frontend includes a compact editorial homepage/auth flow, a dashboard, dedicated `/library` and `/insights` routes, `/books/:id` details, shelf filtering/sorting, progress indicators and editable reader profiles. All production actions use the existing real services. Marketing preview content is explicitly illustrative.
+
+Requests terminate after 20 seconds with a meaningful error. Login/restore no longer depends on reading or analytics availability. Expired/invalid account sessions prompt sign-in; account outages offer a retry without erasing the token. Forward page updates now persist reading sessions even if no minutes are supplied; analytics measure those logged sessions.
+
+For exact behavior, validation evidence, infrastructure limits and handoff:
+
+- [Redesign report](docs/REDESIGN-REPORT.md)
+- [Local development and isolated QA](docs/LOCAL-DEVELOPMENT.md)
+- [Feature inventory and checklist](docs/IMPLEMENTATION.md)
+- [Updated API contracts](docs/api-contracts.md)
+
+No production deployment or data mutation was performed. Public frontend availability was verified, but the three backend health endpoints exceeded 50-second read-only checks. Database expiry has **not** been established; inspect the Render account/logs and active database before release.
+
+### Release configuration
+
+- Keep the existing persistent JWT_SECRET on the user service; reading and analytics must use that exact value. Do not rotate it as part of this change. Production user-service startup requires at least 32 characters.
+- Verify DATABASE_URL points to the intended active database. Preserve existing data; restore a real backup if infrastructure recovery requires it.
+- Frontend VITE_* service URLs are build-time values. Render Blueprint references remain in place; production fallbacks match the existing public service domains.
+- CORS_ORIGIN is now the explicit `https://readlytics-web.onrender.com` origin. If using a custom domain, update all three services with the allowed comma-separated origins.
+- No schema migration is required. Docker builds must use the repository root context described in Compose; this includes the shared SQL schema.
+- The frontend build uses Vite 6 and the lockfile. Use Node 20.20+ for local/CI parity. Python dependencies are pinned in each service requirements file. Render's Python configuration is retained.
+- Review and deploy deliberately after verifying infrastructure; nothing was pushed or automatically deployed.
+
+
+### Verified checks
+
+The final local run passed **65 automated tests**: 19 frontend, 9 user-service, 11 reading-service, 9 analytics-service, 2 real API/SQL integration, and 15 browser/accessibility/layout tests. The production frontend build also passed. The integration database was disposable PGlite PostgreSQL, not production. Docker/stock PostgreSQL 16 and live production authentication remain unverified; see the report for full limitations.

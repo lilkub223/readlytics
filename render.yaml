@@ -3,8 +3,18 @@ services:
     name: readlytics-web
     runtime: static
     rootDir: frontend
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci --no-audit --no-fund && npm run build
     staticPublishPath: dist
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
     routes:
       - type: rewrite
         source: /*
@@ -31,7 +41,7 @@ services:
     runtime: node
     plan: free
     rootDir: services/user-service
-    buildCommand: npm install
+    buildCommand: npm ci --omit=dev --no-audit --no-fund
     startCommand: npm start
     healthCheckPath: /health
     envVars:
@@ -40,7 +50,7 @@ services:
           name: readlytics-db
           property: connectionString
       - key: CORS_ORIGIN
-        value: "*"
+        value: "https://readlytics-web.onrender.com"
       - key: JWT_SECRET
         generateValue: true
 
@@ -60,7 +70,7 @@ services:
           name: readlytics-db
           property: connectionString
       - key: CORS_ORIGIN
-        value: "*"
+        value: "https://readlytics-web.onrender.com"
       - key: JWT_SECRET
         fromService:
           type: web
@@ -83,7 +93,7 @@ services:
           name: readlytics-db
           property: connectionString
       - key: CORS_ORIGIN
-        value: "*"
+        value: "https://readlytics-web.onrender.com"
       - key: JWT_SECRET
         fromService:
           type: web

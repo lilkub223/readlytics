@@ -1,55 +1,48 @@
+import { request, validateAuth } from "./http";
 function normalizeBaseUrl(url, fallback) {
-  return (url ?? fallback).replace(/\/+$/, "");
+  return (url?.trim() || fallback).replace(/\/+$/, "");
 }
 
 const USER_SERVICE_URL = normalizeBaseUrl(
-  import.meta.env.VITE_USER_SERVICE_URL,
-  "http://localhost:4001"
+  import.meta.env?.VITE_USER_SERVICE_URL,
+  import.meta.env?.PROD
+    ? "https://readlytics-user-service.onrender.com"
+    : "http://localhost:4001",
 );
 const READING_SERVICE_URL = normalizeBaseUrl(
-  import.meta.env.VITE_READING_SERVICE_URL,
-  "http://localhost:4002"
+  import.meta.env?.VITE_READING_SERVICE_URL,
+  import.meta.env?.PROD
+    ? "https://readlytics-reading-service.onrender.com"
+    : "http://localhost:4002",
 );
 const ANALYTICS_SERVICE_URL = normalizeBaseUrl(
-  import.meta.env.VITE_ANALYTICS_SERVICE_URL,
-  "http://localhost:4003"
+  import.meta.env?.VITE_ANALYTICS_SERVICE_URL,
+  import.meta.env?.PROD
+    ? "https://readlytics-analytics-service.onrender.com"
+    : "http://localhost:4003",
 );
 
-async function request(url, options = {}) {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers ?? {}),
-    },
-  });
-
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
-
-  if (!response.ok) {
-    throw new Error(data?.error ?? data?.detail ?? `Request failed with status ${response.status}`);
-  }
-
-  return data;
+export async function registerUser(payload) {
+  return validateAuth(
+    await request(`${USER_SERVICE_URL}/api/auth/register`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  );
 }
 
-export function registerUser(payload) {
-  return request(`${USER_SERVICE_URL}/api/auth/register`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+export async function loginUser(payload) {
+  return validateAuth(
+    await request(`${USER_SERVICE_URL}/api/auth/login`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  );
 }
 
-export function loginUser(payload) {
-  return request(`${USER_SERVICE_URL}/api/auth/login`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export function getCurrentUser(token) {
+export function getCurrentUser(token, signal) {
   return request(`${USER_SERVICE_URL}/api/users/me`, {
+    signal,
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -57,7 +50,9 @@ export function getCurrentUser(token) {
 }
 
 export function getUserProfile(username) {
-  return request(`${USER_SERVICE_URL}/api/users/${encodeURIComponent(username)}`);
+  return request(
+    `${USER_SERVICE_URL}/api/users/${encodeURIComponent(username)}`,
+  );
 }
 
 export function getFollowing(userId) {
@@ -82,9 +77,12 @@ export function unfollowUser(token, userId) {
   });
 }
 
-export function searchBooks(query) {
-  const params = new URLSearchParams({ q: query });
-  return request(`${READING_SERVICE_URL}/api/books/search?${params.toString()}`);
+export function searchBooks(query, page = 1, signal) {
+  const params = new URLSearchParams({ q: query, page: String(page) });
+  return request(
+    `${READING_SERVICE_URL}/api/books/search?${params.toString()}`,
+    { signal },
+  );
 }
 
 export function getShelves(token) {
@@ -106,22 +104,28 @@ export function saveShelfEntry(token, payload) {
 }
 
 export function deleteShelfEntry(token, entryId) {
-  return request(`${READING_SERVICE_URL}/api/shelves/${encodeURIComponent(entryId)}`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${token}`,
+  return request(
+    `${READING_SERVICE_URL}/api/shelves/${encodeURIComponent(entryId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     },
-  });
+  );
 }
 
 export function updateShelfProgress(token, entryId, payload) {
-  return request(`${READING_SERVICE_URL}/api/shelves/${encodeURIComponent(entryId)}/progress`, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${token}`,
+  return request(
+    `${READING_SERVICE_URL}/api/shelves/${encodeURIComponent(entryId)}/progress`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
     },
-    body: JSON.stringify(payload),
-  });
+  );
 }
 
 export function saveReview(token, payload) {
@@ -135,12 +139,15 @@ export function saveReview(token, payload) {
 }
 
 export function deleteReview(token, reviewId) {
-  return request(`${READING_SERVICE_URL}/api/reviews/${encodeURIComponent(reviewId)}`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${token}`,
+  return request(
+    `${READING_SERVICE_URL}/api/reviews/${encodeURIComponent(reviewId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
     },
-  });
+  );
 }
 
 export function getMyReviews(token) {
@@ -152,7 +159,9 @@ export function getMyReviews(token) {
 }
 
 export function getUserReviews(userId) {
-  return request(`${READING_SERVICE_URL}/api/reviews/users/${encodeURIComponent(userId)}`);
+  return request(
+    `${READING_SERVICE_URL}/api/reviews/users/${encodeURIComponent(userId)}`,
+  );
 }
 
 export function getAnalyticsSummary(token) {
@@ -176,5 +185,25 @@ export function getFeed(token) {
     headers: {
       Authorization: `Bearer ${token}`,
     },
+  });
+}
+
+export function getBook(bookId, signal) {
+  return request(
+    `${READING_SERVICE_URL}/api/books/${encodeURIComponent(bookId)}`,
+    { signal },
+  );
+}
+export function getBookReviews(bookId, signal) {
+  return request(
+    `${READING_SERVICE_URL}/api/reviews/book/${encodeURIComponent(bookId)}`,
+    { signal },
+  );
+}
+export function updateProfile(token, payload) {
+  return request(`${USER_SERVICE_URL}/api/users/me`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
   });
 }

@@ -112,7 +112,8 @@ def get_shelves_for_user(user_id: str) -> dict:
                     b.id AS book_id,
                     b.title,
                     b.authors,
-                    b.cover_image_url
+                    b.cover_image_url,
+                    b.page_count
                 FROM reading_service.shelf_entries se
                 JOIN reading_service.books b ON b.id = se.book_id
                 WHERE se.user_id = %s
@@ -131,6 +132,7 @@ def get_shelves_for_user(user_id: str) -> dict:
                 "title": row["title"],
                 "authors": row["authors"],
                 "coverImageUrl": row["cover_image_url"],
+                "pageCount": row["page_count"],
                 "currentPage": row["current_page"],
                 "startedAt": row["started_at"],
                 "finishedAt": row["finished_at"],
@@ -171,8 +173,8 @@ def upsert_shelf_entry(user_id: str, book_id: str, status: str, current_page: in
                         ELSE reading_service.shelf_entries.started_at
                     END,
                     finished_at = CASE
-                        WHEN EXCLUDED.status = 'finished' THEN NOW()
-                        ELSE reading_service.shelf_entries.finished_at
+                        WHEN EXCLUDED.status = 'finished' THEN COALESCE(reading_service.shelf_entries.finished_at, NOW())
+                        ELSE NULL
                     END,
                     updated_at = NOW()
                 RETURNING *
@@ -197,9 +199,11 @@ def update_progress(user_id: str, entry_id: str, current_page: int, minutes_read
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, book_id, status, current_page
-                FROM reading_service.shelf_entries
-                WHERE id = %s AND user_id = %s
+                SELECT se.id, se.book_id, se.status, se.current_page, b.page_count
+                FROM reading_service.shelf_entries se
+                JOIN reading_service.books b ON b.id = se.book_id
+                WHERE se.id = %s AND se.user_id = %s
+                FOR UPDATE OF se
                 """,
                 (entry_id, user_id),
             )
@@ -208,6 +212,9 @@ def update_progress(user_id: str, entry_id: str, current_page: int, minutes_read
             if not existing_row:
                 conn.rollback()
                 return None
+
+            if (existing_row['page_count'] or 0) > 0 and current_page > existing_row['page_count']:
+                raise ValueError('Current page cannot exceed the total page count.')
 
             cur.execute(
                 """
@@ -222,7 +229,8 @@ def update_progress(user_id: str, entry_id: str, current_page: int, minutes_read
             )
             shelf_row = cur.fetchone()
 
-            if minutes_read:
+            pages_delta = current_page - existing_row["current_page"]
+            if pages_delta > 0:
                 cur.execute(
                     """
                     INSERT INTO reading_service.reading_sessions (
@@ -237,7 +245,7 @@ def update_progress(user_id: str, entry_id: str, current_page: int, minutes_read
                     (
                         user_id,
                         shelf_row["book_id"],
-                        max(current_page - existing_row["current_page"], 1),
+                        pages_delta,
                         minutes_read,
                         session_date or date.today().isoformat(),
                     ),
@@ -383,3 +391,10 @@ def list_reviews_for_user(user_id: str, limit: int = 6) -> list[dict]:
         }
         for row in rows
     ]
+
+
+def cache_description(book_id: str, description: str):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE reading_service.books SET description = %s WHERE id = %s AND description IS NULL", (description, book_id))
+        conn.commit()

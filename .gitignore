@@ -6,3 +6,10 @@ __pycache__/
 .DS_Store
 .env
 
+
+.env.*
+!.env.example
+.venv-ci/
+output/
+playwright-report/
+test-results/

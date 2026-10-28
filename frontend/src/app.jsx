@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from "react";
+import ProfileEditor from "./components/profile-editor";
+import { Landing, Cover, BookMosaic, ShelfChart } from "./components/product";
+import React, { useEffect, useState, useRef, lazy, Suspense } from "react";
 
 import {
   deleteReview,
@@ -22,10 +24,14 @@ import {
   updateShelfProgress,
 } from "./api";
 
+const BookDetails = lazy(() => import("./components/book-details"));
+
 const ROUTES = {
   about: "/",
   features: "/features",
   dashboard: "/dashboard",
+  library: "/library",
+  insights: "/insights",
   discover: "/discover",
   community: "/community",
   login: "/login",
@@ -33,7 +39,7 @@ const ROUTES = {
 };
 
 const NAV_ITEMS = [
-  { label: "Features", path: ROUTES.features },
+  { label: "My Library", path: ROUTES.library },
   { label: "Dashboard", path: ROUTES.dashboard },
   { label: "Discover", path: ROUTES.discover },
   { label: "Community", path: ROUTES.community },
@@ -54,21 +60,30 @@ const DEFAULT_AUTH_FORM = {
 };
 
 const DEFAULT_REVIEW_DRAFTS = {};
-const SEARCH_SUGGESTIONS = ["Dune", "Octavia Butler", "Fantasy", "Japanese literature", "Historical fiction"];
+const SEARCH_SUGGESTIONS = [
+  "Dune",
+  "Octavia Butler",
+  "Fantasy",
+  "Japanese literature",
+  "Historical fiction",
+];
 const RECENT_SEARCH_STORAGE_KEY = "readlytics-recent-searches";
 
 const FEATURE_PREVIEW_ITEMS = [
   {
     title: "Reading Insights",
-    description: "See your pace, favorite genres, rating trends, and reading streaks in one calm, focused view.",
+    description:
+      "See your pace, favorite genres, rating trends, and reading streaks in one calm, focused view.",
   },
   {
     title: "Personalized Recommendations",
-    description: "Get book suggestions shaped by your shelves, recent reviews, and the authors you keep coming back to.",
+    description:
+      "Get book suggestions shaped by your shelves, recent reviews, and the authors you keep coming back to.",
   },
   {
     title: "Social Reading",
-    description: "Follow readers you trust, compare taste, and keep an eye on the books lighting up your community.",
+    description:
+      "Follow readers you trust, compare taste, and keep an eye on the books lighting up your community.",
   },
 ];
 
@@ -78,23 +93,6 @@ const SHELF_INTROS = {
   finished: "Celebrate the titles you have already completed.",
   did_not_finish: "Keep a record of the books that did not quite land.",
 };
-
-const RECOMMENDATION_PLACEHOLDERS = [
-  {
-    title: "Recommendation ready",
-    description: "We will learn from the books you shelve, rate, and review.",
-  },
-  {
-    title: "Taste profile building",
-    description: "Every page tracked helps sharpen what we suggest next.",
-  },
-];
-
-const SUPPORT_ITEMS = [
-  "Build shelves that reflect what you want to read, what you are reading now, and what you have finished.",
-  "Track progress, rate books quickly, and leave thoughtful notes while the reading experience is fresh.",
-  "Unlock insights and recommendations that sharpen as your library and habits grow.",
-];
 
 const DEFAULT_COMMUNITY_STATE = {
   loading: false,
@@ -106,7 +104,10 @@ function normalizePath(pathname) {
   const trimmed = pathname?.replace(/\/+$/, "") || ROUTES.about;
   const normalized = trimmed === "" ? ROUTES.about : trimmed;
 
-  return Object.values(ROUTES).includes(normalized) ? normalized : ROUTES.about;
+  return Object.values(ROUTES).includes(normalized) ||
+    /^\/books\/[a-zA-Z0-9-]+$/.test(normalized)
+    ? normalized
+    : ROUTES.about;
 }
 
 function navigate(path) {
@@ -123,6 +124,14 @@ function navigate(path) {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+function getStoredToken() {
+  try {
+    return window.localStorage.getItem("book-platform-token") ?? "";
+  } catch {
+    return "";
+  }
+}
+
 function getInitialRecentSearches() {
   if (typeof window === "undefined") {
     return [];
@@ -130,7 +139,10 @@ function getInitialRecentSearches() {
 
   try {
     const stored = window.localStorage.getItem(RECENT_SEARCH_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    const parsed = stored ? JSON.parse(stored) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((item) => typeof item === "string").slice(0, 5)
+      : [];
   } catch (_error) {
     return [];
   }
@@ -158,7 +170,9 @@ function formatRatingStars(rating) {
 
 function getShelfProgressLabel(entry) {
   if (entry.status === "currently_reading") {
-    return entry.currentPage > 0 ? `On page ${entry.currentPage}` : "Just getting started";
+    return entry.currentPage > 0
+      ? `On page ${entry.currentPage}`
+      : "Just getting started";
   }
 
   if (entry.status === "finished") {
@@ -166,17 +180,30 @@ function getShelfProgressLabel(entry) {
   }
 
   if (entry.status === "did_not_finish") {
-    return entry.currentPage > 0 ? `Stopped at page ${entry.currentPage}` : "Did not finish";
+    return entry.currentPage > 0
+      ? `Stopped at page ${entry.currentPage}`
+      : "Did not finish";
   }
 
   return "Ready to start";
 }
 
-function SiteHeader({ pathname, user, onLogin, onRegister, onSignOut }) {
+function SiteHeader({
+  pathname,
+  user,
+  onLogin,
+  onRegister,
+  onSignOut,
+  onProfile,
+}) {
   return (
     <header className="site-header">
       <div className="site-header-inner">
-        <button className="site-logo" type="button" onClick={() => navigate(ROUTES.about)}>
+        <button
+          className="site-logo"
+          type="button"
+          onClick={() => navigate(ROUTES.about)}
+        >
           <span className="site-logo-mark">R</span>
           <span className="site-logo-wordmark">Readlytics</span>
         </button>
@@ -197,23 +224,42 @@ function SiteHeader({ pathname, user, onLogin, onRegister, onSignOut }) {
         <div className="site-header-actions">
           {user ? (
             <>
-              <button className="nav-user-chip" type="button" onClick={() => navigate(ROUTES.dashboard)}>
-                <span className="nav-avatar">{getInitials(user.displayName)}</span>
+              <button
+                className="nav-user-chip"
+                aria-label="Your reader profile"
+                type="button"
+                onClick={onProfile}
+              >
+                <span className="nav-avatar">
+                  {getInitials(user.displayName)}
+                </span>
                 <span className="nav-user-copy">
                   <strong>{user.displayName}</strong>
                   <span>@{user.username}</span>
                 </span>
               </button>
-              <button className="ghost-button nav-auth-button" type="button" onClick={onSignOut}>
+              <button
+                className="ghost-button nav-auth-button"
+                type="button"
+                onClick={onSignOut}
+              >
                 Log Out
               </button>
             </>
           ) : (
             <>
-              <button className="ghost-button nav-auth-button" type="button" onClick={onLogin}>
+              <button
+                className="ghost-button nav-auth-button"
+                type="button"
+                onClick={onLogin}
+              >
                 Log In
               </button>
-              <button className="primary-button nav-auth-button" type="button" onClick={onRegister}>
+              <button
+                className="primary-button nav-auth-button"
+                type="button"
+                onClick={onRegister}
+              >
                 Sign Up
               </button>
             </>
@@ -234,22 +280,42 @@ function SiteFooter() {
             <span className="site-logo-wordmark">Readlytics</span>
           </div>
           <p className="footer-description">
-            Readlytics helps readers organize their shelves, understand their habits, and find the books that fit next.
+            Readlytics helps readers organize their shelves, understand their
+            habits, and find the books that fit next.
           </p>
-          <p className="footer-copyright">© 2025 Readlytics. All rights reserved.</p>
+          <p className="footer-copyright">
+            © {new Date().getFullYear()} Readlytics. Made for your next chapter.
+          </p>
         </div>
 
         <nav className="footer-links" aria-label="Footer">
-          <button className="footer-link" type="button" onClick={() => navigate(ROUTES.about)}>
+          <button
+            className="footer-link"
+            type="button"
+            onClick={() => navigate(ROUTES.about)}
+          >
             About
           </button>
-          <button className="footer-link" type="button" onClick={() => navigate(ROUTES.features)}>
+          <button
+            className="footer-link"
+            type="button"
+            onClick={() => navigate(ROUTES.features)}
+          >
             Features
           </button>
-          <button className="footer-link" type="button" onClick={() => navigate(ROUTES.community)}>
+          <button
+            className="footer-link"
+            type="button"
+            onClick={() => navigate(ROUTES.community)}
+          >
             Community
           </button>
-          <a className="footer-link" href="https://github.com" rel="noreferrer" target="_blank">
+          <a
+            className="footer-link"
+            href="https://github.com/lilkub223/readlytics"
+            rel="noreferrer"
+            target="_blank"
+          >
             GitHub
           </a>
         </nav>
@@ -258,22 +324,38 @@ function SiteFooter() {
   );
 }
 
-function PageBanner({ eyebrow, title, description, actions, className = "", microcopy, supportingContent }) {
+function PageBanner({
+  eyebrow,
+  title,
+  description,
+  actions,
+  className = "",
+  microcopy,
+  supportingContent,
+}) {
   return (
     <section className={`page-banner panel reveal-section ${className}`.trim()}>
       <div className="page-banner-copy">
         <span className="section-kicker">{eyebrow}</span>
         <h1 className="page-banner-title">{title}</h1>
         <p className="page-banner-description">{description}</p>
-        {supportingContent ? <div className="page-banner-support">{supportingContent}</div> : null}
+        {supportingContent ? (
+          <div className="page-banner-support">{supportingContent}</div>
+        ) : null}
         {actions?.length ? (
           <div className="page-banner-cta">
-            {microcopy ? <p className="page-banner-microcopy">{microcopy}</p> : null}
+            {microcopy ? (
+              <p className="page-banner-microcopy">{microcopy}</p>
+            ) : null}
             <div className="page-banner-actions">
               {actions.map((action) => (
                 <button
                   key={action.label}
-                  className={action.variant === "primary" ? "primary-button" : "ghost-button"}
+                  className={
+                    action.variant === "primary"
+                      ? "primary-button"
+                      : "ghost-button"
+                  }
                   type="button"
                   onClick={action.onClick}
                 >
@@ -288,9 +370,18 @@ function PageBanner({ eyebrow, title, description, actions, className = "", micr
   );
 }
 
-function CommunityBannerSupport({ feedItems, followingUsers, onSelectProfile, token, user }) {
+function CommunityBannerSupport({
+  feedItems,
+  followingUsers,
+  onSelectProfile,
+  token,
+  user,
+}) {
   const visibleReaders = [...followingUsers, ...(user ? [user] : [])]
-    .filter((reader, index, readers) => readers.findIndex((candidate) => candidate.id === reader.id) === index)
+    .filter(
+      (reader, index, readers) =>
+        readers.findIndex((candidate) => candidate.id === reader.id) === index,
+    )
     .slice(0, 4);
 
   const previewItems = feedItems.length
@@ -301,11 +392,16 @@ function CommunityBannerSupport({ feedItems, followingUsers, onSelectProfile, to
       }))
     : [
         {
-          label: token ? "Follow readers to unlock live review and finish updates." : "Live reading activity appears here once you join.",
-          meta: token ? "Your circle shapes this space." : "A calmer community, centered on books.",
+          label: token
+            ? "Follow readers to unlock live review and finish updates."
+            : "Live reading activity appears here once you join.",
+          meta: token
+            ? "Your circle shapes this space."
+            : "A calmer community, centered on books.",
         },
         {
-          label: "Community is built around shelves, thoughtful ratings, and meaningful recommendations.",
+          label:
+            "Community is built around shelves, thoughtful ratings, and meaningful recommendations.",
           meta: "No noise, just reading signals worth keeping up with.",
         },
       ];
@@ -321,7 +417,10 @@ function CommunityBannerSupport({ feedItems, followingUsers, onSelectProfile, to
                 </span>
               ))
             : Array.from({ length: 4 }).map((_, index) => (
-                <span key={index} className="community-avatar-token is-placeholder">
+                <span
+                  key={index}
+                  className="community-avatar-token is-placeholder"
+                >
                   RL
                 </span>
               ))}
@@ -356,83 +455,27 @@ function CommunityBannerSupport({ feedItems, followingUsers, onSelectProfile, to
                 <span>{item.meta}</span>
               </div>
             </div>
-          )
+          ),
         )}
       </div>
     </div>
   );
 }
 
-function HeroSection({ user, spotlightFeatures }) {
-  return (
-    <section className="hero reveal-section">
-      <div className="hero-grid">
-        <div className="hero-copy">
-          <header className="hero-heading">
-            <h1>Readlytics</h1>
-          </header>
-          <p className="intro">
-            A social platform for tracking books, analyzing reading habits, and discovering personalized recommendations.
-          </p>
-          <div className="hero-badge-row">
-            <span className="hero-badge">For Every Reader</span>
-          </div>
-          <div className="hero-actions">
-            <button
-              className="primary-button hero-primary-button"
-              type="button"
-              onClick={() => navigate(user ? ROUTES.dashboard : ROUTES.register)}
-            >
-              {user ? "Open Dashboard" : "Get Started"}
-            </button>
-            <button
-              className="secondary-button hero-secondary-button"
-              type="button"
-              onClick={() => navigate(user ? ROUTES.discover : ROUTES.features)}
-            >
-              {user ? "Discover Books" : "Explore Features"}
-            </button>
-          </div>
-          <p className="hero-microcopy">
-            Track your reading, understand your habits, and discover your next favorite book.
-          </p>
-        </div>
-
-        <aside className="hero-spotlight">
-          <span className="spotlight-label">{user ? "Inside your reading room" : "Product highlights"}</span>
-          <h3 className="spotlight-title">
-            {user ? `Welcome back, ${user.displayName}.` : "A calmer home for every part of your reading life."}
-          </h3>
-          <p className="spotlight-copy">
-            {user
-              ? "Your shelves, trends, and tailored recommendations are all gathered in one calm, focused space."
-              : "Organize your shelves, capture your reactions, and let Readlytics turn that history into useful insight."}
-          </p>
-
-          <div className="hero-feature-grid">
-            {spotlightFeatures.map((feature) => (
-              <article key={feature.title} className="hero-feature-card">
-                <span className="hero-feature-kicker">{feature.title}</span>
-                <strong className="hero-feature-headline">{feature.headline}</strong>
-                <span className="hero-feature-eyebrow">{feature.eyebrow}</span>
-                <p className="hero-feature-copy">{feature.description}</p>
-              </article>
-            ))}
-          </div>
-        </aside>
-      </div>
-    </section>
-  );
-}
-
 function FeaturePreviewSection() {
   return (
-    <section className="feature-preview-section reveal-section" aria-labelledby="feature-preview-heading">
+    <section
+      className="feature-preview-section reveal-section"
+      aria-labelledby="feature-preview-heading"
+    >
       <header className="feature-preview-header">
         <p className="section-kicker">Why readers stay</p>
-        <h2 id="feature-preview-heading">Everything you need to turn reading into a richer routine.</h2>
+        <h2 id="feature-preview-heading">
+          Everything you need to turn reading into a richer routine.
+        </h2>
         <p className="section-description">
-          Readlytics keeps your habits, recommendations, and community moments in one refined product flow.
+          Readlytics keeps your habits, recommendations, and community moments
+          in one refined product flow.
         </p>
       </header>
 
@@ -449,17 +492,27 @@ function FeaturePreviewSection() {
   );
 }
 
-function EmptyState({ title, copy, buttonLabel, buttonVariant = "ghost", onButtonClick }) {
+function EmptyState({
+  title,
+  copy,
+  buttonLabel,
+  buttonVariant = "ghost",
+  onButtonClick,
+}) {
   return (
     <div className="empty-state">
       <span className="empty-state-icon">RL</span>
       <div className="empty-state-copy-block">
-        <p className="empty-state-title">{title}</p>
+        <h3 className="empty-state-title">{title}</h3>
         <p className="empty-state-copy">{copy}</p>
       </div>
       {buttonLabel ? (
         <button
-          className={buttonVariant === "primary" ? "primary-button empty-state-button" : "ghost-button empty-state-button"}
+          className={
+            buttonVariant === "primary"
+              ? "primary-button empty-state-button"
+              : "ghost-button empty-state-button"
+          }
           type="button"
           onClick={onButtonClick}
         >
@@ -481,11 +534,18 @@ function AuthPanel({
   onToggleMode,
   onSignOut,
 }) {
+  const [showPassword, setShowPassword] = useState(false);
   return (
     <article className="panel auth-panel reveal-section">
       <div className="panel-header">
         <div>
-          <h2>{user ? "Your Account" : authMode === "register" ? "Registration" : "Welcome Back"}</h2>
+          <h2>
+            {user
+              ? "Your Account"
+              : authMode === "register"
+                ? "Registration"
+                : "Welcome Back"}
+          </h2>
           <p className="panel-description">
             {user
               ? "Keep your profile close and your next read even closer."
@@ -495,8 +555,14 @@ function AuthPanel({
           </p>
         </div>
         {!user ? (
-          <button className="ghost-button auth-switch-button" type="button" onClick={onToggleMode}>
-            {authMode === "register" ? "Have an account? Log In" : "Need an account? Register"}
+          <button
+            className="ghost-button auth-switch-button"
+            type="button"
+            onClick={onToggleMode}
+          >
+            {authMode === "register"
+              ? "Have an account? Log In"
+              : "Need an account? Register"}
           </button>
         ) : null}
       </div>
@@ -518,15 +584,27 @@ function AuthPanel({
                 Display Name
                 <input
                   value={authForm.displayName}
-                  onChange={(event) => onFormChange("displayName", event.target.value)}
-                  placeholder="Reader One"
+                  onChange={(event) =>
+                    onFormChange("displayName", event.target.value)
+                  }
+                  required
+                  maxLength={100}
+                  autoComplete="name"
+                  placeholder="Your name"
                 />
               </label>
               <label>
                 Username
                 <input
                   value={authForm.username}
-                  onChange={(event) => onFormChange("username", event.target.value)}
+                  onChange={(event) =>
+                    onFormChange("username", event.target.value)
+                  }
+                  required
+                  minLength={3}
+                  maxLength={30}
+                  pattern="[a-zA-Z0-9_]+"
+                  autoComplete="username"
                   placeholder="reader01"
                 />
               </label>
@@ -538,6 +616,8 @@ function AuthPanel({
             <input
               value={authForm.email}
               onChange={(event) => onFormChange("email", event.target.value)}
+              required
+              autoComplete="email"
               placeholder="reader@example.com"
               type="email"
             />
@@ -548,45 +628,49 @@ function AuthPanel({
             <input
               value={authForm.password}
               onChange={(event) => onFormChange("password", event.target.value)}
-              placeholder="password123"
-              type="password"
+              required
+              minLength={authMode === "register" ? 8 : undefined}
+              autoComplete={
+                authMode === "register" ? "new-password" : "current-password"
+              }
+              placeholder="Enter your password"
+              type={showPassword ? "text" : "password"}
             />
           </label>
 
-          <button className="primary-button auth-submit-button" disabled={authLoading} type="submit">
-            {authLoading ? "Saving..." : authMode === "register" ? "Create Your Account" : "Continue Reading"}
+          <button
+            className="password-toggle"
+            type="button"
+            aria-pressed={showPassword}
+            onClick={() => setShowPassword((v) => !v)}
+          >
+            {showPassword ? "Hide password" : "Show password"}
           </button>
-          <p className="auth-helper-text">No credit card required. Set up your reading home in under a minute.</p>
-          {authError ? <p className="error-text">{authError}</p> : null}
+          <button
+            className="primary-button auth-submit-button"
+            disabled={authLoading}
+            type="submit"
+          >
+            {authLoading
+              ? "Connecting…"
+              : authMode === "register"
+                ? "Create Your Account"
+                : "Continue Reading"}
+          </button>
+          {authLoading && (
+            <p role="status" className="muted-text small-text">
+              Connecting securely. Sleeping services may take a moment; this
+              attempt will time out so you can retry.
+            </p>
+          )}
+          {authError ? (
+            <p role="alert" className="error-text">
+              {authError}
+            </p>
+          ) : null}
         </form>
       )}
     </article>
-  );
-}
-
-function AuthSupportPanel({ user }) {
-  return (
-    <aside className="panel support-panel reveal-section">
-      <div className="panel-header">
-        <div>
-          <h2>{user ? "Your reading setup is ready." : "What you unlock with Readlytics"}</h2>
-          <p className="panel-description">
-            {user
-              ? "Keep exploring, tracking, and refining your taste profile from one focused workspace."
-              : "A focused reading platform that helps your habits, notes, and recommendations stay in one place."}
-          </p>
-        </div>
-      </div>
-
-      <div className="support-list">
-        {SUPPORT_ITEMS.map((item) => (
-          <div key={item} className="support-list-item">
-            <span className="support-list-mark">RL</span>
-            <p>{item}</p>
-          </div>
-        ))}
-      </div>
-    </aside>
   );
 }
 
@@ -595,9 +679,16 @@ function InsightsPanel({ token, analytics }) {
     <article className="panel reveal-section">
       <div className="panel-header">
         <div>
-          <h2>Reader&apos;s Retreat</h2>
+          <h2>Reading Insights</h2>
+          <button
+            className="text-link small-text"
+            onClick={() => navigate(ROUTES.insights)}
+          >
+            Explore your insights →
+          </button>
           <p className="panel-description">
-            Your cozy corner for tracking progress, habits, ratings, and the genres you keep coming back to.
+            Your cozy corner for tracking progress, habits, ratings, and the
+            genres you keep coming back to.
           </p>
         </div>
       </div>
@@ -610,10 +701,10 @@ function InsightsPanel({ token, analytics }) {
             </div>
             <div className="stat-card">
               <strong>{analytics.pagesReadTotal}</strong>
-              <span>Pages Read</span>
+              <span>Pages Logged</span>
             </div>
             <div className="stat-card">
-              <strong>{analytics.averageRating}</strong>
+              <strong>{analytics.averageRating ?? "—"}</strong>
               <span>Average Rating</span>
             </div>
             <div className="stat-card">
@@ -622,9 +713,16 @@ function InsightsPanel({ token, analytics }) {
             </div>
           </div>
           {analytics.favoriteGenres?.length ? (
-            <p className="genre-line">Top genres: {analytics.favoriteGenres.join(", ")}</p>
+            <p className="genre-line">
+              Top genres: {analytics.favoriteGenres.join(", ")}
+            </p>
           ) : null}
         </>
+      ) : token ? (
+        <p className="muted-text">
+          Reading insights are unavailable right now. Use Retry above to try
+          again; your library is still available.
+        </p>
       ) : (
         <EmptyState
           title="Your dashboard is ready."
@@ -639,6 +737,8 @@ function InsightsPanel({ token, analytics }) {
 
 function DiscoverPanel({
   shelfActionState,
+  hasMore,
+  onLoadMore,
   token,
   recentSearches,
   reviewSaveState,
@@ -659,7 +759,8 @@ function DiscoverPanel({
         <div>
           <h2>Discover Books</h2>
           <p className="panel-description">
-            Search for new titles, save them to a shelf, and leave a quick review while inspiration is fresh.
+            Search for new titles, save them to a shelf, and leave a quick
+            review while inspiration is fresh.
           </p>
         </div>
       </div>
@@ -668,25 +769,49 @@ function DiscoverPanel({
         <input
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
+          aria-label="Search books"
+          maxLength={200}
           placeholder="Search for books, authors, or genres..."
         />
-        <button className="primary-button" disabled={searchState.loading} type="submit">
+        <button
+          className="primary-button"
+          disabled={searchState.loading}
+          type="submit"
+        >
           {searchState.loading ? "Searching..." : "Search"}
         </button>
       </form>
 
       <div className="search-helper-row">
-        <span className="search-helper-label">{recentSearches.length ? "Recent searches" : "Popular searches"}</span>
+        <span className="search-helper-label">
+          {recentSearches.length ? "Recent searches" : "Suggested searches"}
+        </span>
         <div className="suggestion-chip-row">
-          {(recentSearches.length ? recentSearches : SEARCH_SUGGESTIONS).map((term) => (
-            <button key={term} className="suggestion-chip" type="button" onClick={() => onSuggestionSelect(term)}>
-              {term}
-            </button>
-          ))}
+          {(recentSearches.length ? recentSearches : SEARCH_SUGGESTIONS).map(
+            (term) => (
+              <button
+                key={term}
+                className="suggestion-chip"
+                type="button"
+                onClick={() => onSuggestionSelect(term)}
+              >
+                {term}
+              </button>
+            ),
+          )}
         </div>
       </div>
 
-      {searchState.error ? <p className="error-text">{searchState.error}</p> : null}
+      {searchState.error ? (
+        <p role="alert" className="error-text">
+          {searchState.error}
+        </p>
+      ) : null}
+      {searchState.warning && (
+        <p role="status" className="notice">
+          {searchState.warning}
+        </p>
+      )}
 
       <div className="search-results-shell">
         {searchState.loading ? (
@@ -714,7 +839,10 @@ function DiscoverPanel({
         ) : searchResults.length ? (
           <div className="results-grid">
             {searchResults.map((book) => {
-              const reviewDraft = reviewDrafts[book.id] ?? { rating: "", reviewText: "" };
+              const reviewDraft = reviewDrafts[book.id] ?? {
+                rating: "",
+                reviewText: "",
+              };
               const saveState = reviewSaveState[book.id];
               const shelfState = shelfActionState[book.id];
 
@@ -723,17 +851,34 @@ function DiscoverPanel({
                   <div className="book-card-top">
                     <div className="book-cover-shell">
                       {book.coverImageUrl ? (
-                        <img className="book-cover-image" src={book.coverImageUrl} alt={`Cover for ${book.title}`} />
+                        <img
+                          loading="lazy"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                          className="book-cover-image"
+                          src={book.coverImageUrl}
+                          alt={`Cover for ${book.title}`}
+                        />
                       ) : (
                         <div className="book-cover-fallback">RL</div>
                       )}
                     </div>
 
                     <div className="book-copy">
-                      <p className="book-title">{book.title}</p>
-                      <p className="muted-text">{(book.authors ?? []).join(", ") || "Unknown author"}</p>
+                      <button
+                        className="book-title text-link"
+                        onClick={() => navigate(`/books/${book.id}`)}
+                      >
+                        {book.title}
+                      </button>
+                      <p className="muted-text">
+                        {(book.authors ?? []).join(", ") || "Unknown author"}
+                      </p>
                       <p className="muted-text small-text">
-                        {book.publishedYear ? `First published ${book.publishedYear}` : "Publication year unavailable"}
+                        {book.publishedYear
+                          ? `First published ${book.publishedYear}`
+                          : "Publication year unavailable"}
                       </p>
                     </div>
                   </div>
@@ -754,15 +899,28 @@ function DiscoverPanel({
                     </div>
 
                     {shelfState?.message ? (
-                      <p className={shelfState.status === "error" ? "error-text review-feedback" : "success-text review-feedback"}>
+                      <p
+                        className={
+                          shelfState.status === "error"
+                            ? "error-text review-feedback"
+                            : "success-text review-feedback"
+                        }
+                      >
                         {shelfState.message}
                       </p>
                     ) : null}
 
                     <div className="review-row">
                       <select
+                        aria-label={`Rating for ${book.title}`}
                         value={reviewDraft.rating}
-                        onChange={(event) => onReviewDraftChange(book.id, "rating", event.target.value)}
+                        onChange={(event) =>
+                          onReviewDraftChange(
+                            book.id,
+                            "rating",
+                            event.target.value,
+                          )
+                        }
                       >
                         <option value="">Rating</option>
                         {[1, 2, 3, 4, 5].map((rating) => (
@@ -773,7 +931,14 @@ function DiscoverPanel({
                       </select>
                       <input
                         value={reviewDraft.reviewText}
-                        onChange={(event) => onReviewDraftChange(book.id, "reviewText", event.target.value)}
+                        onChange={(event) =>
+                          onReviewDraftChange(
+                            book.id,
+                            "reviewText",
+                            event.target.value,
+                          )
+                        }
+                        aria-label={`Review for ${book.title}`}
                         placeholder="Quick review"
                       />
                       <button
@@ -790,7 +955,13 @@ function DiscoverPanel({
                       </button>
                     </div>
                     {saveState?.message ? (
-                      <p className={saveState.status === "error" ? "error-text review-feedback" : "success-text review-feedback"}>
+                      <p
+                        className={
+                          saveState.status === "error"
+                            ? "error-text review-feedback"
+                            : "success-text review-feedback"
+                        }
+                      >
                         {saveState.message}
                       </p>
                     ) : null}
@@ -801,9 +972,13 @@ function DiscoverPanel({
           </div>
         ) : (
           <EmptyState
-            title="Start your next search."
+            title={
+              searchState.searched
+                ? "No books found."
+                : "Start your next search."
+            }
             copy="Look up a title, author, or genre to start building your shelves and recommendations."
-            buttonLabel={token ? "Try a Popular Search" : "Create an Account"}
+            buttonLabel={token ? "Try a Suggested Search" : "Create an Account"}
             buttonVariant={token ? "ghost" : "primary"}
             onButtonClick={() => {
               if (token) {
@@ -815,6 +990,15 @@ function DiscoverPanel({
           />
         )}
       </div>
+      {hasMore && (
+        <button
+          className="ghost-button load-more"
+          disabled={searchState.loading}
+          onClick={onLoadMore}
+        >
+          Load more books
+        </button>
+      )}
     </article>
   );
 }
@@ -832,22 +1016,80 @@ function LibraryPanel({
   onPageDraftChange,
   onProgressUpdate,
 }) {
+  const [activeShelf, setActiveShelf] = useState("all");
+  const [filter, setFilter] = useState("");
+  const [sort, setSort] = useState("recent");
+  const visibleShelves = Object.entries(shelves)
+    .filter(([key]) => activeShelf === "all" || key === activeShelf)
+    .map(([key, entries]) => [
+      key,
+      entries
+        .filter((e) =>
+          `${e.title} ${(e.authors ?? []).join(" ")}`
+            .toLowerCase()
+            .includes(filter.toLowerCase()),
+        )
+        .slice()
+        .sort((a, b) =>
+          sort === "title" ? a.title.localeCompare(b.title) : 0,
+        ),
+    ]);
   return (
     <article className="panel wide-panel reveal-section">
       <div className="panel-header">
         <div>
           <h2>Your Library</h2>
           <p className="panel-description">
-            Every saved title, neatly organized so your next read is always within reach.
+            Every saved title, neatly organized so your next read is always
+            within reach.
           </p>
         </div>
-        <button className="ghost-button" type="button" onClick={onRefresh} disabled={!token}>
+        <button
+          className="ghost-button"
+          type="button"
+          onClick={onRefresh}
+          disabled={!token}
+        >
           Refresh
         </button>
       </div>
 
+      <div className="library-toolbar">
+        <div className="shelf-tabs" aria-label="Bookshelf filters">
+          {[
+            ["all", "All books"],
+            ...SHELF_OPTIONS.map((o) => [o.value, o.label]),
+          ].map(([key, label]) => (
+            <button
+              className={activeShelf === key ? "is-active" : ""}
+              aria-pressed={activeShelf === key}
+              key={key}
+              onClick={() => setActiveShelf(key)}
+            >
+              {label}
+              {key !== "all" && <span>{shelves[key].length}</span>}
+            </button>
+          ))}
+        </div>
+        <div className="search-row">
+          <input
+            aria-label="Filter your library"
+            placeholder="Filter title or author"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
+          <select
+            aria-label="Sort library"
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+          >
+            <option value="recent">Recently updated</option>
+            <option value="title">Title A–Z</option>
+          </select>
+        </div>
+      </div>
       <div className="shelf-grid">
-        {Object.entries(shelves).map(([shelfName, entries]) => (
+        {visibleShelves.map(([shelfName, entries]) => (
           <section key={shelfName} className="shelf-column">
             <div className="shelf-column-header">
               <div>
@@ -861,15 +1103,36 @@ function LibraryPanel({
               {entries.length ? (
                 entries.map((entry) => (
                   <article key={entry.entryId} className="shelf-entry">
-                    <div className="shelf-entry-copy">
-                      <strong>{entry.title}</strong>
-                      <span>{(entry.authors ?? []).join(", ")}</span>
-                      <span>{getShelfProgressLabel(entry)}</span>
+                    <div className="library-book-head">
+                      <Cover title={entry.title} url={entry.coverImageUrl} />
+                      <div className="shelf-entry-copy">
+                        <button
+                          className="text-link"
+                          onClick={() => navigate(`/books/${entry.bookId}`)}
+                        >
+                          {entry.title}
+                        </button>
+                        <span>{(entry.authors ?? []).join(", ")}</span>
+                        <span>
+                          {getShelfProgressLabel(entry)}
+                          {entry.pageCount ? ` / ${entry.pageCount}` : ""}
+                        </span>
+                        {entry.pageCount > 0 && (
+                          <progress
+                            aria-label={`Reading progress for ${entry.title}`}
+                            value={entry.currentPage}
+                            max={entry.pageCount}
+                          />
+                        )}
+                      </div>
                     </div>
                     <div className="shelf-entry-actions">
                       <select
+                        aria-label={`Shelf for ${entry.title}`}
                         value={shelfDrafts[entry.entryId] ?? entry.status}
-                        onChange={(event) => onShelfDraftChange(entry.entryId, event.target.value)}
+                        onChange={(event) =>
+                          onShelfDraftChange(entry.entryId, event.target.value)
+                        }
                       >
                         {SHELF_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>
@@ -882,17 +1145,24 @@ function LibraryPanel({
                           className="secondary-button"
                           disabled={
                             !token ||
-                            shelfActionState[entry.entryId]?.status === "saving" ||
-                            (shelfDrafts[entry.entryId] ?? entry.status) === entry.status
+                            shelfActionState[entry.entryId]?.status ===
+                              "saving" ||
+                            (shelfDrafts[entry.entryId] ?? entry.status) ===
+                              entry.status
                           }
                           type="button"
                           onClick={() => onShelfMove(entry)}
                         >
-                          {shelfActionState[entry.entryId]?.status === "saving" ? "Updating..." : "Update Shelf"}
+                          {shelfActionState[entry.entryId]?.status === "saving"
+                            ? "Updating..."
+                            : "Update Shelf"}
                         </button>
                         <button
                           className="ghost-button"
-                          disabled={!token || shelfActionState[entry.entryId]?.status === "saving"}
+                          disabled={
+                            !token ||
+                            shelfActionState[entry.entryId]?.status === "saving"
+                          }
                           type="button"
                           onClick={() => onShelfDelete(entry)}
                         >
@@ -902,18 +1172,34 @@ function LibraryPanel({
                       {entry.status === "currently_reading" ? (
                         <div className="shelf-progress-row">
                           <input
-                            min="1"
+                            aria-label={`Current page for ${entry.title}`}
+                            min="0"
+                            max={entry.pageCount || undefined}
                             step="1"
                             type="number"
-                            value={pageDrafts[entry.entryId] ?? entry.currentPage ?? 1}
-                            onChange={(event) => onPageDraftChange(entry.entryId, event.target.value)}
+                            value={
+                              pageDrafts[entry.entryId] ??
+                              entry.currentPage ??
+                              1
+                            }
+                            onChange={(event) =>
+                              onPageDraftChange(
+                                entry.entryId,
+                                event.target.value,
+                              )
+                            }
                           />
                           <button
                             className="ghost-button"
                             disabled={
                               !token ||
-                              shelfActionState[entry.entryId]?.status === "saving" ||
-                              Number(pageDrafts[entry.entryId] ?? entry.currentPage ?? 1) === entry.currentPage
+                              shelfActionState[entry.entryId]?.status ===
+                                "saving" ||
+                              Number(
+                                pageDrafts[entry.entryId] ??
+                                  entry.currentPage ??
+                                  1,
+                              ) === entry.currentPage
                             }
                             type="button"
                             onClick={() => onProgressUpdate(entry)}
@@ -982,14 +1268,29 @@ function ReviewCollection({
           <div className="review-card-top">
             <div className="review-cover-shell">
               {review.coverImageUrl ? (
-                <img className="book-cover-image" src={review.coverImageUrl} alt={`Cover for ${review.title}`} />
+                <img
+                  loading="lazy"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                  className="book-cover-image"
+                  src={review.coverImageUrl}
+                  alt={`Cover for ${review.title}`}
+                />
               ) : (
                 <div className="book-cover-fallback">RL</div>
               )}
             </div>
             <div className="review-card-copy">
-              <strong>{review.title}</strong>
-              <span>{(review.authors ?? []).join(", ") || "Unknown author"}</span>
+              <button
+                className="text-link"
+                onClick={() => navigate(`/books/${review.bookId}`)}
+              >
+                {review.title}
+              </button>
+              <span>
+                {(review.authors ?? []).join(", ") || "Unknown author"}
+              </span>
               <div className="review-rating-row">
                 <span className="pill">{formatRatingStars(review.rating)}</span>
                 <span>{review.rating} / 5</span>
@@ -997,7 +1298,8 @@ function ReviewCollection({
             </div>
           </div>
           <p className="review-card-text">
-            {review.reviewText?.trim() || "No written note yet, but the rating is saved to this reader's profile."}
+            {review.reviewText?.trim() ||
+              "No written note yet, but the rating is saved to this reader's profile."}
           </p>
           {onDeleteReview ? (
             <div className="review-card-actions">
@@ -1007,7 +1309,9 @@ function ReviewCollection({
                 type="button"
                 onClick={() => onDeleteReview(review)}
               >
-                {reviewActionState[review.id]?.status === "saving" ? "Removing..." : "Delete Review"}
+                {reviewActionState[review.id]?.status === "saving"
+                  ? "Removing..."
+                  : "Delete Review"}
               </button>
               {reviewActionState[review.id]?.message ? (
                 <p
@@ -1028,14 +1332,20 @@ function ReviewCollection({
   );
 }
 
-function RecentReviewsPanel({ reviewActionState, reviews, token, onDeleteReview }) {
+function RecentReviewsPanel({
+  reviewActionState,
+  reviews,
+  token,
+  onDeleteReview,
+}) {
   return (
     <article className="panel wide-panel reveal-section">
       <div className="panel-header">
         <div>
           <h2>Recent Reviews</h2>
           <p className="panel-description">
-            The books you&apos;ve rated and the quick notes you&apos;ve left along the way.
+            The books you&apos;ve rated and the quick notes you&apos;ve left
+            along the way.
           </p>
         </div>
       </div>
@@ -1064,51 +1374,56 @@ function RecommendationsPanel({ token, recommendations }) {
         <div>
           <h2>Picked For You</h2>
           <p className="panel-description">
-            Personalized suggestions based on the books, authors, and genres you&apos;ve been enjoying.
+            Personalized suggestions based on the books, authors, and genres
+            you&apos;ve been enjoying.
           </p>
         </div>
       </div>
       {token && recommendations.length ? (
         <div className="recommendation-grid">
           {recommendations.map((recommendation) => (
-            <article key={recommendation.bookId} className="recommendation-card">
+            <article
+              key={recommendation.bookId}
+              className="recommendation-card"
+            >
               <div className="recommendation-top">
                 <div className="recommendation-cover-shell">
                   {recommendation.coverImageUrl ? (
-                    <img className="book-cover-image" src={recommendation.coverImageUrl} alt={`Cover for ${recommendation.title}`} />
+                    <img
+                      loading="lazy"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                      className="book-cover-image"
+                      src={recommendation.coverImageUrl}
+                      alt={`Cover for ${recommendation.title}`}
+                    />
                   ) : (
                     <div className="book-cover-fallback">RL</div>
                   )}
                 </div>
                 <div className="recommendation-copy">
-                  <strong>{recommendation.title}</strong>
+                  <button
+                    className="text-link"
+                    onClick={() => navigate(`/books/${recommendation.bookId}`)}
+                  >
+                    {recommendation.title}
+                  </button>
                   <span>{recommendation.reason}</span>
                 </div>
               </div>
-              <span className="score-chip">{recommendation.score}</span>
+              <span className="pill">Suggested read</span>
             </article>
           ))}
         </div>
       ) : (
         <div className="recommendation-state">
-          <div className="recommendation-grid recommendation-placeholder-grid">
-            {RECOMMENDATION_PLACEHOLDERS.map((item) => (
-              <article key={item.title} className="recommendation-card recommendation-placeholder-card">
-                <div className="recommendation-top">
-                  <div className="recommendation-cover-shell">
-                    <div className="book-cover-fallback">RL</div>
-                  </div>
-                  <div className="recommendation-copy">
-                    <strong>{item.title}</strong>
-                    <span>{item.description}</span>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-
           <EmptyState
-            title={token ? "Your recommendation engine is warming up." : "Recommendations are ready when you are."}
+            title={
+              token
+                ? "Your recommendation engine is warming up."
+                : "Recommendations are ready when you are."
+            }
             copy={
               token
                 ? "Add more books, shelves, and reviews so Readlytics can tailor suggestions to your reading habits."
@@ -1116,7 +1431,9 @@ function RecommendationsPanel({ token, recommendations }) {
             }
             buttonLabel={token ? "Discover More Books" : "Sign Up"}
             buttonVariant="primary"
-            onButtonClick={() => navigate(token ? ROUTES.discover : ROUTES.register)}
+            onButtonClick={() =>
+              navigate(token ? ROUTES.discover : ROUTES.register)
+            }
           />
         </div>
       )}
@@ -1137,10 +1454,14 @@ function CommunityPanel({
   onProfileSearch,
   onSelectProfile,
   onToggleFollow,
+  onProfileSaved,
 }) {
-  const isOwnProfile = Boolean(user && communityProfile && communityProfile.id === user.id);
+  const isOwnProfile = Boolean(
+    user && communityProfile && communityProfile.id === user.id,
+  );
   const isFollowing = Boolean(
-    communityProfile && followingUsers.some((reader) => reader.id === communityProfile.id)
+    communityProfile &&
+    followingUsers.some((reader) => reader.id === communityProfile.id),
   );
 
   return (
@@ -1151,7 +1472,8 @@ function CommunityPanel({
             <div>
               <h2>Find a Reader</h2>
               <p className="panel-description">
-                Look up another reader by username, view their profile, and follow them to personalize your community feed.
+                Look up another reader by username, view their profile, and
+                follow them to personalize your community feed.
               </p>
             </div>
           </div>
@@ -1160,19 +1482,29 @@ function CommunityPanel({
             <input
               value={communityQuery}
               onChange={(event) => setCommunityQuery(event.target.value)}
+              aria-label="Reader username"
+              id="reader-search"
               placeholder="Search by username..."
             />
-            <button className="primary-button" disabled={communityState.loading} type="submit">
+            <button
+              className="primary-button"
+              disabled={communityState.loading}
+              type="submit"
+            >
               {communityState.loading ? "Looking..." : "Find Reader"}
             </button>
           </form>
 
-          {communityState.error ? <p className="error-text">{communityState.error}</p> : null}
+          {communityState.error ? (
+            <p className="error-text">{communityState.error}</p>
+          ) : null}
 
           {communityProfile ? (
             <article className="reader-profile-card">
               <div className="reader-profile-head">
-                <div className="reader-avatar">{getInitials(communityProfile.displayName)}</div>
+                <div className="reader-avatar">
+                  {getInitials(communityProfile.displayName)}
+                </div>
                 <div className="reader-profile-meta">
                   <strong>{communityProfile.displayName}</strong>
                   <span>@{communityProfile.username}</span>
@@ -1180,7 +1512,8 @@ function CommunityPanel({
               </div>
 
               <p className="muted-text">
-                {communityProfile.bio?.trim() || "This reader has not written a bio yet, but their shelves can still tell a story."}
+                {communityProfile.bio?.trim() ||
+                  "This reader has not written a bio yet, but their shelves can still tell a story."}
               </p>
 
               <div className="reader-stats">
@@ -1206,7 +1539,11 @@ function CommunityPanel({
 
               <div className="profile-action-row">
                 {isOwnProfile ? (
-                  <span className="pill">This is your profile</span>
+                  <ProfileEditor
+                    user={user}
+                    token={token}
+                    onSaved={onProfileSaved}
+                  />
                 ) : token ? (
                   <button
                     className={isFollowing ? "ghost-button" : "primary-button"}
@@ -1214,10 +1551,18 @@ function CommunityPanel({
                     type="button"
                     onClick={() => onToggleFollow(communityProfile)}
                   >
-                    {communityState.actionLoading ? "Updating..." : isFollowing ? "Following" : "Follow Reader"}
+                    {communityState.actionLoading
+                      ? "Updating..."
+                      : isFollowing
+                        ? "Following"
+                        : "Follow Reader"}
                   </button>
                 ) : (
-                  <button className="ghost-button" type="button" onClick={() => navigate(ROUTES.login)}>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => navigate(ROUTES.login)}
+                  >
                     Log In to Follow
                   </button>
                 )}
@@ -1227,7 +1572,8 @@ function CommunityPanel({
                 <div className="profile-review-header">
                   <h3>Recent Reviews</h3>
                   <p className="muted-text small-text">
-                    A quick look at what this reader has rated and written about recently.
+                    A quick look at what this reader has rated and written about
+                    recently.
                   </p>
                 </div>
                 <ReviewCollection
@@ -1244,7 +1590,9 @@ function CommunityPanel({
               copy="Try a username to open a reader profile, follow them, and start shaping your community feed."
               buttonLabel={token ? "Go to Dashboard" : "Create Account"}
               buttonVariant={token ? "ghost" : "primary"}
-              onButtonClick={() => navigate(token ? ROUTES.dashboard : ROUTES.register)}
+              onButtonClick={() =>
+                navigate(token ? ROUTES.dashboard : ROUTES.register)
+              }
             />
           )}
         </article>
@@ -1254,7 +1602,8 @@ function CommunityPanel({
             <div>
               <h2>Your Circle</h2>
               <p className="panel-description">
-                Keep track of the readers you follow and jump into their profiles whenever you want.
+                Keep track of the readers you follow and jump into their
+                profiles whenever you want.
               </p>
             </div>
           </div>
@@ -1272,7 +1621,10 @@ function CommunityPanel({
                     <div className="circle-card-copy">
                       <strong>{reader.displayName}</strong>
                       <span>@{reader.username}</span>
-                      <p>{reader.bio?.trim() || "A thoughtful reader building their shelves."}</p>
+                      <p>
+                        {reader.bio?.trim() ||
+                          "A thoughtful reader building their shelves."}
+                      </p>
                     </div>
                     <span className="score-chip">View</span>
                   </button>
@@ -1284,9 +1636,7 @@ function CommunityPanel({
                 copy="Follow a few readers and their activity will start showing up here and in your community feed."
                 buttonLabel="Find Readers"
                 onButtonClick={() => {
-                  if (communityQuery.trim()) {
-                    onProfileSearch();
-                  }
+                  document.getElementById("reader-search")?.focus();
                 }}
               />
             )
@@ -1307,7 +1657,8 @@ function CommunityPanel({
           <div>
             <h2>Reader Activity</h2>
             <p className="panel-description">
-              See what fellow readers are reviewing, finishing, and recommending across the community.
+              See what fellow readers are reviewing, finishing, and recommending
+              across the community.
             </p>
           </div>
         </div>
@@ -1315,7 +1666,10 @@ function CommunityPanel({
           feedItems.length ? (
             <div className="recommendation-grid">
               {feedItems.map((item, index) => (
-                <article key={`${item.type}-${item.createdAt}-${index}`} className="recommendation-card">
+                <article
+                  key={`${item.type}-${item.createdAt}-${index}`}
+                  className="recommendation-card"
+                >
                   <strong>{item.message}</strong>
                   <button
                     className="inline-profile-link"
@@ -1349,12 +1703,8 @@ function CommunityPanel({
   );
 }
 
-function AboutPage({ user, spotlightFeatures }) {
-  return (
-    <div className="content-stack">
-      <HeroSection user={user} spotlightFeatures={spotlightFeatures} />
-    </div>
-  );
+function AboutPage({ user }) {
+  return <Landing user={user} navigate={navigate} />;
 }
 
 function FeaturesPage({ user }) {
@@ -1362,7 +1712,7 @@ function FeaturesPage({ user }) {
     <div className="content-stack">
       <PageBanner
         eyebrow="Feature overview"
-        title="A focused reading product with room to grow."
+        title="For every kind of reader."
         description="Track your shelves, review books, understand your habits, and keep your reading community close without clutter."
         actions={[
           {
@@ -1382,99 +1732,180 @@ function FeaturesPage({ user }) {
 }
 
 function AuthPage(props) {
-  const { authMode, user } = props;
-
   return (
-    <div className="content-stack">
-      <PageBanner
-        eyebrow={authMode === "register" ? "Join Readlytics" : "Return to your shelves"}
-        title={authMode === "register" ? "Create your reading home." : "Welcome back to Readlytics."}
-        description={
-          authMode === "register"
-            ? "Set up your account, start organizing your shelves, and build a reading profile that gets smarter with every book."
-            : "Sign in to get back to your dashboard, discover new books, and see what your community is reading."
-        }
-        actions={
-          user
-            ? [
-                { label: "Open Dashboard", variant: "primary", onClick: () => navigate(ROUTES.dashboard) },
-                { label: "Discover Books", onClick: () => navigate(ROUTES.discover) },
-              ]
-            : [
-                {
-                  label: authMode === "register" ? "Log In" : "Create Account",
-                  onClick: props.onToggleMode,
-                },
-              ]
-        }
-      />
-      <div className="page-two-column-grid">
-        <AuthPanel {...props} />
-        <AuthSupportPanel user={user} />
-      </div>
+    <div className="auth-layout">
+      <aside className="auth-editorial">
+        <span className="section-kicker">
+          A little more reading. A little more you.
+        </span>
+        <h1>
+          Your next chapter
+          <br />
+          <em>starts here.</em>
+        </h1>
+        <p>
+          A home for the books you love, the stories you discover, and the
+          reader you become.
+        </p>
+        <BookMosaic compact />
+        <span className="small-text">Your library. Your pace.</span>
+      </aside>
+      <AuthPanel {...props} />
     </div>
   );
 }
 
-function DashboardPage({
-  analytics,
-  pageDrafts,
-  recommendations,
-  reviewActionState,
-  reviews,
-  shelves,
-  shelfActionState,
-  shelfDrafts,
-  token,
-  onRefresh,
-  onDeleteReview,
-  onPageDraftChange,
-  onProgressUpdate,
-  onShelfDelete,
-  onShelfDraftChange,
-  onShelfMove,
-  user,
-}) {
+function DashboardPage(props) {
+  const { analytics, dataState, feedItems, mode, shelves, token, user } = props;
+  const library = <LibraryPanel {...props} />;
   return (
     <div className="content-stack">
       <PageBanner
-        eyebrow="Dashboard"
-        title={user ? `Welcome back, ${user.displayName}.` : "Your reading dashboard awaits."}
-        description="Reader's Retreat brings your habits, shelves, and tailored suggestions into one calm workspace."
-        actions={
-          token
-            ? [
-                { label: "Discover Books", variant: "primary", onClick: () => navigate(ROUTES.discover) },
-              ]
-            : [
-                { label: "Log In", variant: "primary", onClick: () => navigate(ROUTES.login) },
-                { label: "Create Account", onClick: () => navigate(ROUTES.register) },
-              ]
+        eyebrow={
+          mode === "/library"
+            ? "MY LIBRARY"
+            : mode === "/insights"
+              ? "READING INSIGHTS"
+              : "YOUR READING SPACE"
         }
+        title={
+          mode === "/library"
+            ? "Every book has a place."
+            : mode === "/insights"
+              ? "Find your reading rhythm."
+              : `A new chapter, ${user?.displayName || "reader"}.`
+        }
+        description="Your books, your progress, your next chapter."
+        actions={[
+          {
+            label: "Discover books ↗",
+            variant: "primary",
+            onClick: () => navigate("/discover"),
+          },
+        ]}
       />
-      <section className="layout-grid">
-        <InsightsPanel token={token} analytics={analytics} />
-        <LibraryPanel
-          pageDrafts={pageDrafts}
-          shelves={shelves}
-          shelfDrafts={shelfDrafts}
-          shelfActionState={shelfActionState}
-          token={token}
-          onRefresh={onRefresh}
-          onPageDraftChange={onPageDraftChange}
-          onProgressUpdate={onProgressUpdate}
-          onShelfDelete={onShelfDelete}
-          onShelfDraftChange={onShelfDraftChange}
-          onShelfMove={onShelfMove}
-        />
-        <RecentReviewsPanel
-          reviewActionState={reviewActionState}
-          token={token}
-          reviews={reviews}
-          onDeleteReview={onDeleteReview}
-        />
-        <RecommendationsPanel token={token} recommendations={recommendations} />
-      </section>
+      {mode !== "/library" && (
+        <>
+          {dataState.Insights?.loading ? (
+            <div
+              className="stats-grid"
+              role="status"
+              aria-label="Loading reading insights"
+            >
+              {[1, 2, 3, 4].map((n) => (
+                <div key={n} className="skeleton-block stat-card" />
+              ))}
+            </div>
+          ) : (
+            <InsightsPanel token={token} analytics={analytics} />
+          )}
+          <div className="page-two-column-grid">
+            <ShelfChart shelves={shelves} />
+            <article className="panel">
+              <div className="panel-header">
+                <h2>Continue reading</h2>
+                <button
+                  className="text-link"
+                  onClick={() => navigate("/library")}
+                >
+                  My library →
+                </button>
+              </div>
+              {shelves.currently_reading.length ? (
+                <div className="continue-list">
+                  {shelves.currently_reading.map((entry) => (
+                    <div className="continue-book" key={entry.entryId}>
+                      <Cover title={entry.title} url={entry.coverImageUrl} />
+                      <div>
+                        <button
+                          className="text-link"
+                          onClick={() => navigate(`/books/${entry.bookId}`)}
+                        >
+                          {entry.title}
+                        </button>
+                        <p className="muted-text small-text">
+                          {(entry.authors ?? []).join(", ")}
+                        </p>
+                        {entry.pageCount > 0 && (
+                          <progress
+                            aria-label={`${entry.title} progress`}
+                            value={entry.currentPage}
+                            max={entry.pageCount}
+                          />
+                        )}
+                        <p className="small-text">
+                          Page {entry.currentPage}
+                          {entry.pageCount ? ` of ${entry.pageCount}` : ""}
+                        </p>
+                        <button
+                          className="ghost-button"
+                          onClick={() => navigate("/library")}
+                        >
+                          Update progress
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  title="Your next chapter starts with a book."
+                  copy="Find a book you love and add it to Currently Reading."
+                  buttonLabel="Find a book"
+                  onButtonClick={() => navigate("/discover")}
+                />
+              )}
+            </article>
+          </div>
+        </>
+      )}
+      {mode === "/library" &&
+        (dataState.Library?.loading ? (
+          <p role="status" className="notice">
+            Loading your library…
+          </p>
+        ) : (
+          library
+        ))}
+      {mode !== "/library" && (
+        <>
+          <div className="dashboard-secondary">
+            <RecentReviewsPanel
+              reviewActionState={props.reviewActionState}
+              token={token}
+              reviews={props.reviews}
+              onDeleteReview={props.onDeleteReview}
+            />
+            <RecommendationsPanel
+              token={token}
+              recommendations={props.recommendations}
+            />
+          </div>
+          <article className="panel">
+            <div className="panel-header">
+              <h2>From your reading circle</h2>
+              <button
+                className="text-link"
+                onClick={() => navigate("/community")}
+              >
+                Community →
+              </button>
+            </div>
+            {feedItems.length ? (
+              feedItems.slice(0, 5).map((item, i) => (
+                <p className="activity-line" key={i}>
+                  {item.message}
+                </p>
+              ))
+            ) : (
+              <p className="muted-text">
+                Follow readers in Community to see their recent reviews and
+                finished books.
+              </p>
+            )}
+          </article>
+        </>
+      )}
     </div>
   );
 }
@@ -1490,7 +1921,8 @@ function DiscoverPage(props) {
           {
             label: props.token ? "Open Dashboard" : "Get Started",
             variant: "primary",
-            onClick: () => navigate(props.token ? ROUTES.dashboard : ROUTES.register),
+            onClick: () =>
+              navigate(props.token ? ROUTES.dashboard : ROUTES.register),
           },
         ]}
       />
@@ -1507,7 +1939,11 @@ function CommunityPage(props) {
       <PageBanner
         className="community-banner"
         eyebrow="Community"
-        title={user ? "Keep up with your reading circle." : "A calmer social space for readers."}
+        title={
+          user
+            ? "Keep up with your reading circle."
+            : "A calmer social space for readers."
+        }
         description="Stay connected with what others are reading, rating, and recommending."
         microcopy="Join a community of readers discovering and sharing books."
         supportingContent={
@@ -1521,9 +1957,19 @@ function CommunityPage(props) {
         }
         actions={
           token
-            ? [{ label: "Open Dashboard", variant: "primary", onClick: () => navigate(ROUTES.dashboard) }]
+            ? [
+                {
+                  label: "Open Dashboard",
+                  variant: "primary",
+                  onClick: () => navigate(ROUTES.dashboard),
+                },
+              ]
             : [
-                { label: "Join Readlytics", variant: "primary", onClick: () => navigate(ROUTES.register) },
+                {
+                  label: "Join Readlytics",
+                  variant: "primary",
+                  onClick: () => navigate(ROUTES.register),
+                },
                 { label: "Log In", onClick: () => navigate(ROUTES.login) },
               ]
         }
@@ -1535,16 +1981,36 @@ function CommunityPage(props) {
 
 export default function App() {
   const [pathname, setPathname] = useState(() => {
-    const initialPath = typeof window === "undefined" ? ROUTES.about : normalizePath(window.location.pathname);
+    const initialPath =
+      typeof window === "undefined"
+        ? ROUTES.about
+        : normalizePath(window.location.pathname);
 
-    if (typeof window !== "undefined" && window.location.pathname !== initialPath) {
+    if (
+      typeof window !== "undefined" &&
+      window.location.pathname !== initialPath
+    ) {
       window.history.replaceState({}, "", initialPath);
     }
 
     return initialPath;
   });
-  const [token, setToken] = useState(() => window.localStorage.getItem("book-platform-token") ?? "");
+  const [token, setToken] = useState(getStoredToken);
   const [user, setUser] = useState(null);
+  const [sessionStatus, setSessionStatus] = useState(() =>
+    getStoredToken() ? "restoring" : "unauthenticated",
+  );
+  const [sessionError, setSessionError] = useState("");
+  const [sessionAttempt, setSessionAttempt] = useState(0);
+  const [dataState, setDataState] = useState({});
+  const authInFlight = useRef(false);
+  const activeToken = useRef(token);
+  activeToken.current = token;
+  const sectionGeneration = useRef({});
+  const searchController = useRef(null);
+  const searchGeneration = useRef(0);
+  const [searchPage, setSearchPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
   const [authMode, setAuthMode] = useState("register");
   const [authForm, setAuthForm] = useState(DEFAULT_AUTH_FORM);
   const [authError, setAuthError] = useState("");
@@ -1552,7 +2018,9 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("dune");
   const [searchResults, setSearchResults] = useState([]);
   const [searchState, setSearchState] = useState({ loading: false, error: "" });
-  const [recentSearches, setRecentSearches] = useState(() => getInitialRecentSearches());
+  const [recentSearches, setRecentSearches] = useState(() =>
+    getInitialRecentSearches(),
+  );
   const [shelves, setShelves] = useState({
     want_to_read: [],
     currently_reading: [],
@@ -1575,34 +2043,6 @@ export default function App() {
   const [communityReviews, setCommunityReviews] = useState([]);
   const [communityState, setCommunityState] = useState(DEFAULT_COMMUNITY_STATE);
   const [followingUsers, setFollowingUsers] = useState([]);
-
-  const totalSavedBooks = Object.values(shelves).reduce((count, entries) => count + entries.length, 0);
-  const spotlightFeatures = [
-    {
-      title: "Smart",
-      eyebrow: token ? `${totalSavedBooks} books shelved` : "Reading insights",
-      headline: token ? "Your reading life is already taking shape." : "Insights that sharpen as you read more.",
-      description: token && analytics
-        ? `${analytics.pagesReadTotal} pages tracked with your latest habits feeding a clearer picture.`
-        : "Spot patterns in pace, streaks, genres, and ratings without losing the calm of a clean reading space.",
-    },
-    {
-      title: "Tailored",
-      eyebrow: token && analytics ? `${analytics.currentStreakDays} day streak` : "Personalized picks",
-      headline: token ? "Recommendations tuned to your shelves." : "Suggestions that feel more personal.",
-      description: token
-        ? "Your saved books, reviews, and favorite authors are already shaping what you should reach for next."
-        : "Let your shelves, ratings, and evolving taste guide the books you are most likely to love next.",
-    },
-    {
-      title: "Social",
-      eyebrow: token ? `${feedItems.length} recent updates` : "Reader community",
-      headline: token ? "Stay close to the readers you trust." : "A more thoughtful kind of reading community.",
-      description: token
-        ? "Follow what other readers are finishing, reviewing, and recommending from one focused activity stream."
-        : "Follow other readers, compare taste, and keep a pulse on the books that keep the conversation going.",
-    },
-  ];
 
   useEffect(() => {
     function handlePopstate() {
@@ -1632,27 +2072,10 @@ export default function App() {
   }, [pathname]);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("is-visible");
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.16, rootMargin: "0px 0px -8% 0px" }
-    );
-
-    const sections = document.querySelectorAll(".reveal-section");
-    sections.forEach((section) => observer.observe(section));
-
-    return () => observer.disconnect();
-  }, [pathname]);
-
-  useEffect(() => {
     if (!token) {
       setUser(null);
+      setSessionStatus("unauthenticated");
+      setDataState({});
       setShelves({
         want_to_read: [],
         currently_reading: [],
@@ -1673,39 +2096,73 @@ export default function App() {
       setLibraryShelfState({});
       setReviewActionState({});
       setReviewSaveState({});
-      window.localStorage.removeItem("book-platform-token");
+      setReviewDrafts({});
+      try {
+        window.localStorage.removeItem("book-platform-token");
+      } catch {}
       return;
     }
 
-    window.localStorage.setItem("book-platform-token", token);
-
+    try {
+      window.localStorage.setItem("book-platform-token", token);
+    } catch {
+      /* session remains usable in this tab */
+    }
+    const controller = new AbortController();
     let cancelled = false;
-
-    async function loadAuthenticatedState() {
+    async function restore() {
+      setSessionStatus("restoring");
+      setSessionError("");
       try {
-        const { user: currentUser } = await getCurrentUser(token);
-
+        const payload = await getCurrentUser(token, controller.signal);
+        if (!payload?.user?.id)
+          throw new Error("The account service returned an invalid response.");
         if (!cancelled) {
-          setUser(currentUser);
-        }
-
-        if (!cancelled) {
-          await refreshPersonalizedData(token, currentUser);
+          setUser(payload.user);
+          setSessionStatus("authenticated");
         }
       } catch (error) {
-        if (!cancelled) {
-          setAuthError(error.message);
+        if (cancelled) return;
+        if (error.status === 401) {
           setToken("");
+          setUser(null);
+          setSessionStatus("unauthenticated");
+          setAuthError("Your session has expired. Please sign in again.");
+        } else {
+          setSessionStatus("error");
+          setSessionError(error.message);
         }
       }
     }
-
-    loadAuthenticatedState();
-
+    restore();
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [token]);
+  }, [token, sessionAttempt]);
+
+  useEffect(() => {
+    if (
+      sessionStatus === "authenticated" &&
+      token &&
+      user &&
+      [ROUTES.login, ROUTES.register].includes(pathname)
+    )
+      navigate(ROUTES.dashboard);
+  }, [sessionStatus, token, user, pathname]);
+
+  useEffect(() => {
+    const protectedPage = [
+      ROUTES.dashboard,
+      ROUTES.library,
+      ROUTES.insights,
+    ].includes(pathname);
+    if (protectedPage && !token) navigate(ROUTES.login);
+  }, [pathname, token]);
+
+  useEffect(() => {
+    if (user?.id && token) refreshPersonalizedData(token, user);
+  }, [user?.id, token]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -1719,11 +2176,11 @@ export default function App() {
       try {
         const payload = await getFollowing(user.id);
 
-        if (!cancelled) {
+        if (!cancelled && activeToken.current === token) {
           setFollowingUsers(payload.following ?? []);
         }
       } catch (_error) {
-        if (!cancelled) {
+        if (!cancelled && activeToken.current === token) {
           setFollowingUsers([]);
         }
       }
@@ -1736,60 +2193,107 @@ export default function App() {
     };
   }, [user?.id]);
 
-  async function loadInsights(currentToken) {
-    if (!currentToken) {
-      setAnalytics(null);
-      setRecommendations([]);
-      setFeedItems([]);
-      return;
-    }
-
+  async function loadSection(key, operation, apply, currentToken) {
+    if (!currentToken) return;
+    const generation = (sectionGeneration.current[key] ?? 0) + 1;
+    sectionGeneration.current[key] = generation;
+    setDataState((current) => ({
+      ...current,
+      [key]: { loading: true, error: "" },
+    }));
     try {
-      const [summary, recommendationPayload, feedPayload] = await Promise.all([
-        getAnalyticsSummary(currentToken),
-        getRecommendations(currentToken),
-        getFeed(currentToken),
-      ]);
-
-      setAnalytics(summary);
-      setRecommendations(recommendationPayload.recommendations ?? []);
-      setFeedItems(feedPayload.items ?? []);
-    } catch (_error) {
-      setAnalytics(null);
-      setRecommendations([]);
-      setFeedItems([]);
+      const payload = await operation();
+      if (
+        activeToken.current !== currentToken ||
+        sectionGeneration.current[key] !== generation
+      )
+        return;
+      apply(payload);
+      setDataState((current) => ({
+        ...current,
+        [key]: { loading: false, error: "" },
+      }));
+    } catch (error) {
+      if (
+        activeToken.current !== currentToken ||
+        sectionGeneration.current[key] !== generation
+      )
+        return;
+      // A downstream 401 can also mean misconfigured secrets; never erase a verified session here.
+      setDataState((current) => ({
+        ...current,
+        [key]: { loading: false, error: error.message },
+      }));
     }
   }
 
-  async function refreshPersonalizedData(currentToken = token, currentUser = user) {
-    if (!currentToken) {
-      return;
-    }
+  async function loadInsights(currentToken) {
+    return Promise.allSettled([
+      loadSection(
+        "Insights",
+        () => getAnalyticsSummary(currentToken),
+        setAnalytics,
+        currentToken,
+      ),
+      loadSection(
+        "Recommendations",
+        () => getRecommendations(currentToken),
+        (p) => setRecommendations(p.recommendations ?? []),
+        currentToken,
+      ),
+      loadSection(
+        "Activity",
+        () => getFeed(currentToken),
+        (p) => setFeedItems(p.items ?? []),
+        currentToken,
+      ),
+    ]);
+  }
 
-    const [shelfData, reviewPayload] = await Promise.all([getShelves(currentToken), getMyReviews(currentToken)]);
-    const nextReviews = reviewPayload.reviews ?? [];
-    setShelves(shelfData);
-    setPersonalReviews(nextReviews);
-    setLibraryShelfDrafts(
-      Object.fromEntries(
-        Object.values(shelfData)
-          .flat()
-          .map((entry) => [entry.entryId, entry.status])
-      )
-    );
-    setLibraryPageDrafts(
-      Object.fromEntries(
-        Object.values(shelfData)
-          .flat()
-          .map((entry) => [entry.entryId, entry.currentPage || 1])
-      )
-    );
-
-    if (currentUser?.id && communityProfile?.id === currentUser.id) {
-      setCommunityReviews(nextReviews);
-    }
-
-    await loadInsights(currentToken);
+  async function refreshPersonalizedData(
+    currentToken = token,
+    currentUser = user,
+  ) {
+    if (!currentToken) return;
+    void loadInsights(currentToken);
+    return Promise.allSettled([
+      loadSection(
+        "Library",
+        () => getShelves(currentToken),
+        (shelfData) => {
+          setShelves(shelfData);
+          const entries = Object.values(shelfData).flat();
+          setLibraryShelfDrafts(
+            Object.fromEntries(entries.map((e) => [e.entryId, e.status])),
+          );
+          setLibraryPageDrafts(
+            Object.fromEntries(
+              entries.map((e) => [e.entryId, e.currentPage ?? 0]),
+            ),
+          );
+        },
+        currentToken,
+      ),
+      loadSection(
+        "Reviews",
+        () => getMyReviews(currentToken),
+        (payload) => {
+          const reviews = payload.reviews ?? [];
+          setPersonalReviews(reviews);
+          setReviewDrafts(
+            Object.fromEntries(
+              reviews.map((r) => [
+                r.bookId,
+                { rating: String(r.rating), reviewText: r.reviewText ?? "" },
+              ]),
+            ),
+          );
+          if (currentUser?.id === communityProfile?.id)
+            setCommunityReviews(reviews);
+        },
+        currentToken,
+      ),
+    ]);
   }
 
   function handleReviewDraftChange(bookId, field, value) {
@@ -1834,7 +2338,7 @@ export default function App() {
 
     setLibraryPageDrafts((current) => ({
       ...current,
-      [entryId]: Number.isNaN(numericValue) ? 1 : Math.max(1, numericValue),
+      [entryId]: Number.isNaN(numericValue) ? 0 : Math.max(0, numericValue),
     }));
 
     setLibraryShelfState((current) => {
@@ -1875,6 +2379,8 @@ export default function App() {
 
   async function handleAuthSubmit(event) {
     event.preventDefault();
+    if (authInFlight.current) return;
+    authInFlight.current = true;
     setAuthLoading(true);
     setAuthError("");
 
@@ -1887,47 +2393,85 @@ export default function App() {
               password: authForm.password,
             });
 
+      setUser(payload.user);
+      setSessionStatus("authenticated");
       setToken(payload.token);
       setAuthForm(DEFAULT_AUTH_FORM);
-      navigate(ROUTES.dashboard);
+      // Redirect after React commits the token; native popstate can otherwise race auth state.
     } catch (error) {
       setAuthError(error.message);
     } finally {
+      authInFlight.current = false;
       setAuthLoading(false);
     }
   }
 
+  useEffect(() => () => searchController.current?.abort(), []);
+
   function storeRecentSearch(query) {
     setRecentSearches((current) => {
-      const next = [query, ...current.filter((item) => item.toLowerCase() !== query.toLowerCase())].slice(0, 5);
-      window.localStorage.setItem(RECENT_SEARCH_STORAGE_KEY, JSON.stringify(next));
+      const next = [
+        query,
+        ...current.filter((item) => item.toLowerCase() !== query.toLowerCase()),
+      ].slice(0, 5);
+      try {
+        window.localStorage.setItem(
+          RECENT_SEARCH_STORAGE_KEY,
+          JSON.stringify(next),
+        );
+      } catch {}
       return next;
     });
   }
 
-  async function runSearch(query) {
+  async function runSearch(query, page = 1) {
+    searchController.current?.abort();
+    const controller = new AbortController();
+    searchController.current = controller;
+    const generation = ++searchGeneration.current;
     const normalizedQuery = query.trim();
 
     if (!normalizedQuery) {
       setSearchResults([]);
-      setSearchState({ loading: false, error: "Enter a title, author, or genre to start exploring." });
+      setSearchState({
+        loading: false,
+        error: "Enter a title, author, or genre to start exploring.",
+      });
       return;
     }
 
     setSearchState({ loading: true, error: "" });
-    setSearchResults([]);
+    if (page === 1) setSearchResults([]);
 
     try {
-      const payload = await searchBooks(normalizedQuery);
-      setSearchResults(payload.results ?? []);
+      const payload = await searchBooks(
+        normalizedQuery,
+        page,
+        controller.signal,
+      );
+      if (generation !== searchGeneration.current) return;
+      setSearchResults((current) => [
+        ...new Map(
+          [...(page > 1 ? current : []), ...(payload.results ?? [])].map(
+            (b) => [b.id, b],
+          ),
+        ).values(),
+      ]);
+      setSearchPage(page);
+      setHasMore(Boolean(payload.hasMore));
+      setSearchState({
+        loading: false,
+        error: "",
+        warning: payload.warning,
+        searched: true,
+      });
       storeRecentSearch(normalizedQuery);
     } catch (error) {
+      if (generation !== searchGeneration.current) return;
       setSearchResults([]);
       setSearchState({ loading: false, error: error.message });
       return;
     }
-
-    setSearchState({ loading: false, error: "" });
   }
 
   async function handleSearch(event) {
@@ -1958,7 +2502,14 @@ export default function App() {
           message: `Saving to ${formatShelfName(status)}...`,
         },
       }));
-      await saveShelfEntry(token, { bookId, status, currentPage: status === "currently_reading" ? 1 : 0 });
+      const existing = Object.values(shelves)
+        .flat()
+        .find((e) => e.bookId === bookId);
+      await saveShelfEntry(token, {
+        bookId,
+        status,
+        currentPage: existing?.currentPage ?? 0,
+      });
       await refreshPersonalizedData();
       setDiscoverShelfState((current) => ({
         ...current,
@@ -2008,7 +2559,7 @@ export default function App() {
       await saveShelfEntry(token, {
         bookId: entry.bookId,
         status: nextStatus,
-        currentPage: nextStatus === "currently_reading" && entry.currentPage === 0 ? 1 : entry.currentPage,
+        currentPage: entry.currentPage,
       });
       await refreshPersonalizedData();
       setLibraryShelfState((current) => ({
@@ -2069,9 +2620,15 @@ export default function App() {
       return;
     }
 
-    const nextPage = Number(libraryPageDrafts[entry.entryId] ?? entry.currentPage ?? 1);
+    const nextPage = Number(
+      libraryPageDrafts[entry.entryId] ?? entry.currentPage ?? 1,
+    );
 
-    if (!Number.isFinite(nextPage) || nextPage < 1) {
+    if (
+      !Number.isFinite(nextPage) ||
+      !Number.isInteger(nextPage) ||
+      nextPage < 0
+    ) {
       setLibraryShelfState((current) => ({
         ...current,
         [entry.entryId]: {
@@ -2101,7 +2658,9 @@ export default function App() {
           message: `Updating to page ${nextPage}...`,
         },
       }));
-      await updateShelfProgress(token, entry.entryId, { currentPage: nextPage });
+      await updateShelfProgress(token, entry.entryId, {
+        currentPage: nextPage,
+      });
       await refreshPersonalizedData();
       setLibraryShelfState((current) => ({
         ...current,
@@ -2228,8 +2787,17 @@ export default function App() {
 
     try {
       const payload = await getUserProfile(normalizedUsername);
-      const reviewPayload = await getUserReviews(payload.profile.id);
       setCommunityProfile(payload.profile);
+      let reviewPayload = { reviews: [] };
+      try {
+        reviewPayload = await getUserReviews(payload.profile.id);
+      } catch (error) {
+        setDataState((current) => ({
+          ...current,
+          "Public reviews": { loading: false, error: error.message },
+        }));
+      }
+
       setCommunityReviews(reviewPayload.reviews ?? []);
       setCommunityQuery(payload.profile.username);
       setCommunityState({
@@ -2267,8 +2835,14 @@ export default function App() {
       return;
     }
 
-    const alreadyFollowing = followingUsers.some((reader) => reader.id === profile.id);
-    setCommunityState((current) => ({ ...current, actionLoading: true, error: "" }));
+    const alreadyFollowing = followingUsers.some(
+      (reader) => reader.id === profile.id,
+    );
+    setCommunityState((current) => ({
+      ...current,
+      actionLoading: true,
+      error: "",
+    }));
 
     try {
       if (alreadyFollowing) {
@@ -2286,13 +2860,25 @@ export default function App() {
 
       setCommunityProfile(profilePayload.profile);
       setCommunityReviews(reviewPayload.reviews ?? []);
-      setCommunityState((current) => ({ ...current, actionLoading: false, error: "" }));
+      setCommunityState((current) => ({
+        ...current,
+        actionLoading: false,
+        error: "",
+      }));
     } catch (error) {
-      setCommunityState((current) => ({ ...current, actionLoading: false, error: error.message }));
+      setCommunityState((current) => ({
+        ...current,
+        actionLoading: false,
+        error: error.message,
+      }));
     }
   }
 
   function handleSignOut() {
+    activeToken.current = "";
+    setUser(null);
+    setSessionStatus("unauthenticated");
+    setSessionError("");
     setToken("");
     setAuthError("");
     setCommunityQuery("");
@@ -2304,9 +2890,14 @@ export default function App() {
 
   if (pathname === ROUTES.features) {
     content = <FeaturesPage user={user} />;
-  } else if (pathname === ROUTES.dashboard) {
+  } else if (
+    [ROUTES.dashboard, ROUTES.library, ROUTES.insights].includes(pathname)
+  ) {
     content = (
       <DashboardPage
+        mode={pathname}
+        dataState={dataState}
+        feedItems={feedItems}
         analytics={analytics}
         pageDrafts={libraryPageDrafts}
         recommendations={recommendations}
@@ -2316,7 +2907,9 @@ export default function App() {
         shelfActionState={libraryShelfState}
         shelfDrafts={libraryShelfDrafts}
         token={token}
-        onRefresh={() => refreshPersonalizedData()}
+        onRefresh={() => {
+          void refreshPersonalizedData();
+        }}
         onDeleteReview={handleDeleteReview}
         onPageDraftChange={handleLibraryPageDraftChange}
         onProgressUpdate={handleLibraryProgressUpdate}
@@ -2329,6 +2922,8 @@ export default function App() {
   } else if (pathname === ROUTES.discover) {
     content = (
       <DiscoverPage
+        hasMore={hasMore}
+        onLoadMore={() => runSearch(searchQuery, searchPage + 1)}
         shelfActionState={discoverShelfState}
         token={token}
         recentSearches={recentSearches}
@@ -2345,6 +2940,23 @@ export default function App() {
         onReviewSave={handleReviewSave}
       />
     );
+  } else if (pathname.startsWith("/books/")) {
+    content = (
+      <Suspense fallback={<p role="status">Opening book…</p>}>
+        <BookDetails
+          key={pathname}
+          bookId={pathname.split("/")[2]}
+          token={token}
+          shelves={shelves}
+          onShelfSave={handleShelfSave}
+          shelfState={discoverShelfState}
+          reviewDrafts={reviewDrafts}
+          onReviewDraftChange={handleReviewDraftChange}
+          onReviewSave={handleReviewSave}
+          reviewSaveState={reviewSaveState}
+        />
+      </Suspense>
+    );
   } else if (pathname === ROUTES.community) {
     content = (
       <CommunityPage
@@ -2359,6 +2971,10 @@ export default function App() {
         user={user}
         onProfileSearch={handleCommunitySearch}
         onSelectProfile={handleSelectProfile}
+        onProfileSaved={(updated) => {
+          setUser(updated);
+          setCommunityProfile((current) => ({ ...current, ...updated }));
+        }}
         onToggleFollow={handleToggleFollow}
       />
     );
@@ -2374,10 +2990,11 @@ export default function App() {
         onFormChange={handleAuthFieldChange}
         onToggleMode={handleAuthModeToggle}
         onSignOut={handleSignOut}
+        onProfile={() => handleSelectProfile(user.username)}
       />
     );
   } else {
-    content = <AboutPage user={user} spotlightFeatures={spotlightFeatures} />;
+    content = <AboutPage user={user} />;
   }
 
   return (
@@ -2388,8 +3005,46 @@ export default function App() {
         onLogin={() => navigate(ROUTES.login)}
         onRegister={() => navigate(ROUTES.register)}
         onSignOut={handleSignOut}
+        onProfile={() => handleSelectProfile(user.username)}
       />
-      <main className="app-shell">{content}</main>
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
+      <main id="main-content" className="app-shell">
+        {sessionStatus === "restoring" && (
+          <p role="status" className="notice">
+            Restoring your session…
+          </p>
+        )}
+        {sessionStatus === "error" && (
+          <div className="notice" role="alert">
+            {sessionError}{" "}
+            <button
+              className="ghost-button"
+              onClick={() => setSessionAttempt((x) => x + 1)}
+            >
+              Retry session
+            </button>
+            <button className="ghost-button" onClick={handleSignOut}>
+              Sign out
+            </button>
+          </div>
+        )}
+        {Object.entries(dataState)
+          .filter(([, v]) => v?.error)
+          .map(([key, v]) => (
+            <div className="notice" role="alert" key={key}>
+              {key}: {v.error}{" "}
+              <button
+                className="ghost-button"
+                onClick={() => refreshPersonalizedData()}
+              >
+                Retry
+              </button>
+            </div>
+          ))}
+        {content}
+      </main>
       <SiteFooter />
     </>
   );

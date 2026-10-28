@@ -11,7 +11,7 @@ _schema_initialized = False
 
 def get_connection():
     if settings.database_url:
-        return connect(settings.database_url, row_factory=dict_row)
+        return connect(settings.database_url, row_factory=dict_row, connect_timeout=5, options="-c statement_timeout=8000")
 
     return connect(
         host=settings.db_host,
@@ -19,7 +19,7 @@ def get_connection():
         user=settings.db_user,
         password=settings.db_password,
         dbname=settings.db_name,
-        row_factory=dict_row,
+        row_factory=dict_row, connect_timeout=5, options="-c statement_timeout=8000",
     )
 
 
@@ -46,4 +46,4 @@ def get_database_health():
                 cur.fetchone()
         return {"status": "ok"}
     except Exception as error:
-        return {"status": "error", "message": str(error)}
+        return {"status": "error", "message": "Database unavailable."}

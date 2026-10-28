@@ -1,14 +1,8 @@
-FROM python:3.10-slim
-
-WORKDIR /app
-
-COPY requirements.txt ./
-
+FROM python:3.11-slim
+WORKDIR /workspace/services/reading-service
+COPY services/reading-service/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-
+COPY services/reading-service/ ./
+COPY infra/docker/init.sql /workspace/infra/docker/init.sql
 EXPOSE 4002
-
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "4002"]
-

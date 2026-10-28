@@ -7,7 +7,7 @@ class Settings:
     database_url = os.getenv("DATABASE_URL")
     cors_origins = [
         origin.strip()
-        for origin in os.getenv("CORS_ORIGIN", "http://localhost:3000").split(",")
+        for origin in os.getenv("CORS_ORIGIN", "http://localhost:3000,http://127.0.0.1:3000").split(",")
         if origin.strip()
     ]
     db_host = os.getenv("PGHOST", "localhost")

@@ -68,14 +68,14 @@ def get_summary(user_id: str) -> dict:
                 """
                 SELECT genre
                 FROM (
-                    SELECT unnest(b.genres) AS genre
+                    SELECT b.id AS book_id, unnest(b.genres) AS genre
                     FROM reading_service.shelf_entries se
                     JOIN reading_service.books b ON b.id = se.book_id
                     WHERE se.user_id = %s
 
-                    UNION ALL
+                    UNION
 
-                    SELECT unnest(b.genres) AS genre
+                    SELECT b.id AS book_id, unnest(b.genres) AS genre
                     FROM reading_service.reviews r
                     JOIN reading_service.books b ON b.id = r.book_id
                     WHERE r.user_id = %s
@@ -174,12 +174,12 @@ def get_recommendations(user_id: str) -> list[dict]:
         )
 
         if shared_authors:
-            reason = f"Because you recently read books by {shared_authors[0]}."
+            reason = f"Because you saved or rated books by {shared_authors[0]}."
         elif shared_genres:
             reason = f"Because you often read {shared_genres[0]}."
         elif not preference_rows:
             score = 40
-            reason = "Fresh pick from books you recently searched."
+            reason = "A recent addition to the shared book catalog."
         else:
             continue
 

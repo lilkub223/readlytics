@@ -12,6 +12,7 @@ pipeline {
           sh '''
             set -eux
             npm ci --no-audit --no-fund
+            npm test
             npm run build
           '''
         }
@@ -24,6 +25,7 @@ pipeline {
           sh '''
             set -eux
             npm ci --no-audit --no-fund
+            npm test
             for file in src/*.js; do
               node --check "$file"
             done
@@ -40,8 +42,9 @@ pipeline {
             python3 -m venv .venv-ci
             . .venv-ci/bin/activate
             python -m pip install --upgrade pip
-            pip install -r requirements.txt
+            pip install -r requirements.txt -r ../requirements-dev.txt
             python -m compileall -q app
+            PYTHONPATH=. python -m pytest tests -q
           '''
         }
       }
@@ -55,8 +58,9 @@ pipeline {
             python3 -m venv .venv-ci
             . .venv-ci/bin/activate
             python -m pip install --upgrade pip
-            pip install -r requirements.txt
+            pip install -r requirements.txt -r ../requirements-dev.txt
             python -m compileall -q app
+            PYTHONPATH=. python -m pytest tests -q
           '''
         }
       }

@@ -1,32 +1,43 @@
 import { config } from "./config.js";
 import { findUserById, mapUser } from "./user-repository.js";
 import { verifyToken } from "./security.js";
-
-export async function requireAuth(req, res, next) {
-  const header = req.header("authorization");
-
-  if (!header?.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Missing Bearer token." });
-  }
-
-  try {
-    const token = header.slice("Bearer ".length);
-    const payload = verifyToken(token, config.jwtSecret);
-    const userRow = await findUserById(payload.sub);
-
-    if (!userRow) {
-      return res.status(401).json({ error: "User not found for token." });
+export function createRequireAuth(findUser = findUserById) {
+  return async (req, res, next) => {
+    const header = req.header("authorization");
+    if (!header?.startsWith("Bearer "))
+      return res.status(401).json({ error: "Missing Bearer token." });
+    let payload;
+    try {
+      payload = verifyToken(header.slice(7), config.jwtSecret);
+    } catch {
+      return res
+        .status(401)
+        .json({
+          error: "Your session is invalid or expired. Please sign in again.",
+        });
     }
-
-    req.auth = {
-      userId: payload.sub,
-      username: payload.username,
-      user: mapUser(userRow),
-    };
-
-    return next();
-  } catch (error) {
-    return res.status(401).json({ error: error.message });
-  }
+    try {
+      const row = await findUser(payload.sub);
+      if (!row)
+        return res
+          .status(401)
+          .json({
+            error: "Account no longer available. Please sign in again.",
+          });
+      req.auth = {
+        userId: payload.sub,
+        username: payload.username,
+        user: mapUser(row),
+      };
+      return next();
+    } catch {
+      return res
+        .status(503)
+        .json({
+          error:
+            "The account service is temporarily unavailable. Please try again.",
+        });
+    }
+  };
 }
-
+export const requireAuth = createRequireAuth();
