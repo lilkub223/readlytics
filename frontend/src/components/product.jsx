@@ -46,7 +46,7 @@ export const SHOWCASE = [
   {
     title: "Matilda",
     author: "Roald Dahl",
-    isbn: "9780140328721",
+    isbn: "9780142410370",
     color: "blue",
   },
 ];
