@@ -81,3 +81,18 @@ See [LOCAL-DEVELOPMENT.md](LOCAL-DEVELOPMENT.md) for exact startup/test instruct
 During the authorized GitHub/Render rollout, Render's monorepo documentation confirmed that files outside rootDir are unavailable at build/runtime. The inherited backend rootDir settings therefore excluded the shared SQL schema. Backend rootDir is now explicitly the repository root, with service-specific build/start commands and build filters including the shared schema. This fixes the schema path for native Render services as well as the Docker fix above. Database configuration and the shared JWT secret references are unchanged. The exact cause of the earlier live timeouts remains unconfirmed without production logs.
 
 Reference: https://render.com/docs/monorepo-support
+
+
+## Authorized production rollout — verified October 27, 2026
+
+This follow-up supersedes the initial report's deployment/health limitation. The user explicitly authorized committing, pushing, and redeploying the project.
+
+- Main redesign: b37ead1. Render configuration fixes: c3b2a90 and 4469cdd.
+- Frontend: Render deployment succeeded; the live homepage visibly contains the redesigned interface.
+- User, reading and analytics services: Render deployments of 4469cdd succeeded.
+- All three live /health endpoints returned HTTP 200 and database status ok.
+- Protected API endpoints returned 401 without a token and the expected Access-Control-Allow-Origin for the production frontend.
+- The frontend /library deep link returned HTTP 200 through the SPA rewrite.
+- Failed Python deployment logs showed the old `pip install -r requirements.txt` command after root-directory synchronization. The dashboard settings already contained the corrected repository-relative commands. Manual deployments using those synchronized settings built and became healthy.
+- No secret was rotated, no database was deliberately reset, and no real user record was changed for smoke testing. Existing-account login, user-specific records and production reading mutations were not exercised; those workflows were verified with isolated local test accounts.
+- Docker/stock PostgreSQL 16 testing and the other local-test limitations above remain unchanged.

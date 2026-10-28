@@ -241,7 +241,7 @@ For exact behavior, validation evidence, infrastructure limits and handoff:
 - [Feature inventory and checklist](docs/IMPLEMENTATION.md)
 - [Updated API contracts](docs/api-contracts.md)
 
-No production deployment or data mutation was performed. Public frontend availability was verified, but the three backend health endpoints exceeded 50-second read-only checks. Database expiry has **not** been established; inspect the Render account/logs and active database before release.
+The authorized production rollout is complete. Render reports successful deployments for the frontend and all three backend services. Each backend health endpoint returns HTTP 200 with a healthy database check; production CORS, unauthenticated 401 responses, and SPA deep links were also verified. No production user records were deliberately changed during verification. Account-specific login and reading workflows were fully tested locally; the user should verify their own production account. The earlier timeouts do not establish a database-expiry diagnosis.
 
 ### Release configuration
 
@@ -251,9 +251,9 @@ No production deployment or data mutation was performed. Public frontend availab
 - CORS_ORIGIN is now the explicit `https://readlytics-web.onrender.com` origin. If using a custom domain, update all three services with the allowed comma-separated origins.
 - No schema migration is required. Backend Docker contexts and native Render rootDir must use the repository root so the shared SQL schema is available. The Blueprint uses service-specific build/start commands and build filters to retain service boundaries.
 - The frontend build uses Vite 6 and the lockfile. Use Node 20.20+ for local/CI parity. Python dependencies are pinned in each service requirements file. Render's Python configuration is retained.
-- Review and deploy deliberately after verifying infrastructure; nothing was pushed or automatically deployed.
+- Code was committed and pushed, then deployed through Render. The initial Python rollout captured an old build command during Blueprint synchronization; manual redeployments with the corrected settings succeeded. See the deployment record in the redesign report.
 
 
 ### Verified checks
 
-The final local run passed **65 automated tests**: 19 frontend, 9 user-service, 11 reading-service, 9 analytics-service, 2 real API/SQL integration, and 15 browser/accessibility/layout tests. The production frontend build also passed. The integration database was disposable PGlite PostgreSQL, not production. Docker/stock PostgreSQL 16 and live production authentication remain unverified; see the report for full limitations.
+The final local run passed **65 automated tests**: 19 frontend, 9 user-service, 11 reading-service, 9 analytics-service, 2 real API/SQL integration, and 15 browser/accessibility/layout tests. The production frontend build also passed. The integration database was disposable PGlite PostgreSQL, not production. Docker/stock PostgreSQL 16 and account-specific production authentication remain unverified; live backend/database health checks passed. See the report for full limitations.
