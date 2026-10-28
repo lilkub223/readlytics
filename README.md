@@ -249,7 +249,7 @@ No production deployment or data mutation was performed. Public frontend availab
 - Verify DATABASE_URL points to the intended active database. Preserve existing data; restore a real backup if infrastructure recovery requires it.
 - Frontend VITE_* service URLs are build-time values. Render Blueprint references remain in place; production fallbacks match the existing public service domains.
 - CORS_ORIGIN is now the explicit `https://readlytics-web.onrender.com` origin. If using a custom domain, update all three services with the allowed comma-separated origins.
-- No schema migration is required. Docker builds must use the repository root context described in Compose; this includes the shared SQL schema.
+- No schema migration is required. Backend Docker contexts and native Render rootDir must use the repository root so the shared SQL schema is available. The Blueprint uses service-specific build/start commands and build filters to retain service boundaries.
 - The frontend build uses Vite 6 and the lockfile. Use Node 20.20+ for local/CI parity. Python dependencies are pinned in each service requirements file. Render's Python configuration is retained.
 - Review and deploy deliberately after verifying infrastructure; nothing was pushed or automatically deployed.
 

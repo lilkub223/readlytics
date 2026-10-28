@@ -40,9 +40,14 @@ services:
     name: readlytics-user-service
     runtime: node
     plan: free
-    rootDir: services/user-service
-    buildCommand: npm ci --omit=dev --no-audit --no-fund
-    startCommand: npm start
+    rootDir: .
+    buildFilter:
+      paths:
+        - services/user-service/**
+        - infra/docker/init.sql
+        - render.yaml
+    buildCommand: npm ci --prefix services/user-service --omit=dev --no-audit --no-fund
+    startCommand: npm --prefix services/user-service start
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
@@ -58,7 +63,12 @@ services:
     name: readlytics-reading-service
     runtime: python
     plan: free
-    rootDir: services/reading-service
+    rootDir: .
+    buildFilter:
+      paths:
+        - services/reading-service/**
+        - infra/docker/init.sql
+        - render.yaml
     buildCommand: pip install -r requirements.txt
     startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
@@ -81,7 +91,12 @@ services:
     name: readlytics-analytics-service
     runtime: python
     plan: free
-    rootDir: services/analytics-service
+    rootDir: .
+    buildFilter:
+      paths:
+        - services/analytics-service/**
+        - infra/docker/init.sql
+        - render.yaml
     buildCommand: pip install -r requirements.txt
     startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health

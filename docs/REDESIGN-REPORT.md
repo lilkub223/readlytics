@@ -74,3 +74,10 @@ Reading/analytics: main/auth/config/db/repository modules, reading external-book
 Infrastructure/docs: backend Dockerfiles, `.dockerignore`, Compose, `render.yaml`, Jenkinsfile, API contracts, development guide, implementation inventory, README, and isolated QA scripts.
 
 See [LOCAL-DEVELOPMENT.md](LOCAL-DEVELOPMENT.md) for exact startup/test instructions and [IMPLEMENTATION.md](IMPLEMENTATION.md) for the original feature inventory/checklist.
+
+
+## Deployment follow-up
+
+During the authorized GitHub/Render rollout, Render's monorepo documentation confirmed that files outside rootDir are unavailable at build/runtime. The inherited backend rootDir settings therefore excluded the shared SQL schema. Backend rootDir is now explicitly the repository root, with service-specific build/start commands and build filters including the shared schema. This fixes the schema path for native Render services as well as the Docker fix above. Database configuration and the shared JWT secret references are unchanged. The exact cause of the earlier live timeouts remains unconfirmed without production logs.
+
+Reference: https://render.com/docs/monorepo-support
