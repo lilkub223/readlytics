@@ -35,7 +35,6 @@ services:
           type: web
           name: readlytics-analytics-service
           envVarKey: RENDER_EXTERNAL_URL
-
   - type: web
     name: readlytics-user-service
     runtime: node
@@ -55,10 +54,9 @@ services:
           name: readlytics-db
           property: connectionString
       - key: CORS_ORIGIN
-        value: "https://readlytics-web.onrender.com"
+        value: https://readlytics-web.onrender.com
       - key: JWT_SECRET
         generateValue: true
-
   - type: web
     name: readlytics-reading-service
     runtime: python
@@ -69,8 +67,10 @@ services:
         - services/reading-service/**
         - infra/docker/init.sql
         - render.yaml
-    buildCommand: pip install -r requirements.txt
-    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    buildCommand: pip install -r services/reading-service/requirements.txt
+    startCommand:
+      python -m uvicorn app.main:app --app-dir services/reading-service
+      --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
@@ -80,13 +80,12 @@ services:
           name: readlytics-db
           property: connectionString
       - key: CORS_ORIGIN
-        value: "https://readlytics-web.onrender.com"
+        value: https://readlytics-web.onrender.com
       - key: JWT_SECRET
         fromService:
           type: web
           name: readlytics-user-service
           envVarKey: JWT_SECRET
-
   - type: web
     name: readlytics-analytics-service
     runtime: python
@@ -97,8 +96,10 @@ services:
         - services/analytics-service/**
         - infra/docker/init.sql
         - render.yaml
-    buildCommand: pip install -r requirements.txt
-    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    buildCommand: pip install -r services/analytics-service/requirements.txt
+    startCommand:
+      python -m uvicorn app.main:app --app-dir services/analytics-service
+      --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
@@ -108,13 +109,12 @@ services:
           name: readlytics-db
           property: connectionString
       - key: CORS_ORIGIN
-        value: "https://readlytics-web.onrender.com"
+        value: https://readlytics-web.onrender.com
       - key: JWT_SECRET
         fromService:
           type: web
           name: readlytics-user-service
           envVarKey: JWT_SECRET
-
 databases:
   - name: readlytics-db
     plan: free
